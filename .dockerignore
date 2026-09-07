@@ -1,0 +1,6 @@
+.git
+.data
+.next
+node_modules
+scratch
+.env*.local

@@ -4,11 +4,11 @@ import { getUserProfileData, updateUser } from "@/lib/users-service";
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const queryUserId = searchParams.get("userId");
+    const queryUserId = searchParams.get("userId") || undefined;
     const cookieUserId = req.cookies.get("auth_user_id")?.value;
     const cookieRole = req.cookies.get("auth_role")?.value;
 
-    let targetId = cookieUserId;
+    let targetId: string | undefined = cookieUserId;
     if (cookieRole === "manager" && queryUserId) {
       targetId = queryUserId;
     } else if (!targetId) {
