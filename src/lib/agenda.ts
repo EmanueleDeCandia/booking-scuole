@@ -1,0 +1,265 @@
+export const START_HOUR = 8;
+export const END_HOUR = 18; // ultimo slot: 18:00-19:00
+export const HOURS = Array.from({ length: END_HOUR - START_HOUR + 1 }, (_, i) => START_HOUR + i);
+
+export const DAY_NAMES_IT = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"];
+export const DAY_SHORT_IT = ["LUN", "MAR", "MER", "GIO", "VEN", "SAB", "DOM"];
+export const MONTH_NAMES_IT = [
+  "Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno",
+  "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre",
+];
+
+export const SERVICES = [
+  { id: "Consulenza", label: "Consulenza", color: "#e8542f" },
+  { id: "Taglio", label: "Taglio & Piega", color: "#4fb3bf" },
+  { id: "Massaggio", label: "Massaggio", color: "#f2b632" },
+  { id: "Visita", label: "Visita", color: "#7a5cff" },
+  { id: "Lezione", label: "Lezione", color: "#3c9a5f" },
+];
+
+export type BookingDTO = {
+  id: number;
+  userId?: string | null;
+  day: string; // YYYY-MM-DD
+  hour: number;
+  clientName: string;
+  clientEmail: string | null;
+  clientPhone: string | null;
+  service: string;
+  notes: string | null;
+  status: string; // confirmed | cancelled | done
+  attendanceStatus: string; // pending | present | absent
+  reminderMinutes: number;
+  reminderSent: boolean;
+  createdAt: string;
+};
+
+export type UserDTO = {
+  id: string;
+  email: string;
+  displayName: string;
+  phone: string | null;
+  avatarUrl: string | null;
+  role: "user" | "manager";
+  status: string;
+  membershipDate: string;
+  notes: string | null;
+  createdAt: string;
+};
+
+export type NotificationDTO = {
+  id: number;
+  bookingId: number | null;
+  kind: string;
+  title: string;
+  message: string;
+  read: boolean;
+  scheduledFor: string | null;
+  createdAt: string;
+};
+
+/** Formatta una data locale come YYYY-MM-DD (senza problemi di timezone). */
+export function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function parseISODate(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/** Lunedì della settimana che contiene `d`. */
+export function startOfWeek(d: Date): Date {
+  const date = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const dow = (date.getDay() + 6) % 7; // 0 = lunedì
+  date.setDate(date.getDate() - dow);
+  return date;
+}
+
+export function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+
+export function weekDays(monday: Date): Date[] {
+  return Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+}
+
+export function isoWeekNumber(d: Date): number {
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  return Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+export function formatHour(h: number): string {
+  return `${String(h).padStart(2, "0")}:00`;
+}
+
+export function bookingDateTime(day: string, hour: number): Date {
+  const d = parseISODate(day);
+  d.setHours(hour, 0, 0, 0);
+  return d;
+}
+
+export function formatDayLong(day: string): string {
+  const d = parseISODate(day);
+  const dow = (d.getDay() + 6) % 7;
+  return `${DAY_NAMES_IT[dow]} ${d.getDate()} ${MONTH_NAMES_IT[d.getMonth()]}`;
+}
+
+export function serviceColor(service: string): string {
+  return SERVICES.find((s) => s.id === service)?.color ?? "#e8542f";
+}
+
+/** Genera il link per aprire direttamente Google Calendar con campi precompilati */
+export function makeGoogleCalendarUrl({
+  day,
+  hour,
+  clientName,
+  service,
+  notes,
+  clientEmail,
+}: {
+  day: string;
+  hour: number;
+  clientName: string;
+  service: string;
+  notes?: string | null;
+  clientEmail?: string | null;
+}): string {
+  const [y, m, d] = day.split("-").map(Number);
+  const startDate = new Date(y, m - 1, d, hour, 0, 0);
+  const endDate = new Date(y, m - 1, d, hour + 1, 0, 0);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const toUtcCompact = (date: Date) => {
+    return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}T${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}Z`;
+  };
+
+  const dates = `${toUtcCompact(startDate)}/${toUtcCompact(endDate)}`;
+  const text = encodeURIComponent(`${service} - ${clientName}`);
+  const details = encodeURIComponent(
+    `Appuntamento per ${service} con ${clientName}.${notes ? `\nNote: ${notes}` : ""}\nPresso: Naïve Studio`,
+  );
+  const location = encodeURIComponent("Naïve Studio");
+  const ctz = encodeURIComponent(
+    (typeof Intl !== "undefined" && Intl.DateTimeFormat().resolvedOptions().timeZone) || "Europe/Rome"
+  );
+  const add = clientEmail && clientEmail.includes("@") ? `&add=${encodeURIComponent(clientEmail.trim())}` : "";
+
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${text}&dates=${dates}&details=${details}&location=${location}&ctz=${ctz}${add}`;
+}
+
+/** Genera e avvia il download di un file .ics standard con allarmi multipli (1 giorno e 1 ora prima) */
+export function downloadIcsFile({
+  day,
+  hour,
+  clientName,
+  service,
+  notes,
+  reminderMinutes = 60,
+}: {
+  day: string;
+  hour: number;
+  clientName: string;
+  service: string;
+  notes?: string | null;
+  reminderMinutes?: number;
+}) {
+  const [y, m, d] = day.split("-").map(Number);
+  const startDate = new Date(y, m - 1, d, hour, 0, 0);
+  const endDate = new Date(y, m - 1, d, hour + 1, 0, 0);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const toUtcCompact = (date: Date) => {
+    return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}T${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}Z`;
+  };
+
+  const icsLines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Naive Agenda//IT",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    `UID:booking-${day}-${hour}-${Date.now()}@naiveagenda`,
+    `DTSTAMP:${toUtcCompact(new Date())}`,
+    `DTSTART:${toUtcCompact(startDate)}`,
+    `DTEND:${toUtcCompact(endDate)}`,
+    `SUMMARY:${service} - ${clientName}`,
+    `DESCRIPTION:${service} con ${clientName}${notes ? ` - Note: ${notes}` : ""}`,
+    "LOCATION:Naïve Studio",
+    "STATUS:CONFIRMED",
+    // Allarme configurato (es. 1 ora prima)
+    "BEGIN:VALARM",
+    `TRIGGER:-PT${reminderMinutes}M`,
+    "ACTION:DISPLAY",
+    `DESCRIPTION:Promemoria: ${service} con ${clientName}`,
+    "END:VALARM",
+    // Allarme aggiuntivo: 1 giorno prima (se il promemoria principale non era già a 1 giorno)
+    reminderMinutes !== 1440
+      ? [
+          "BEGIN:VALARM",
+          "TRIGGER:-P1D",
+          "ACTION:DISPLAY",
+          `DESCRIPTION:Domani hai ${service} alle ${formatHour(hour)}`,
+          "END:VALARM",
+        ].join("\r\n")
+      : "",
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ].filter(Boolean);
+
+  const blob = new Blob([icsLines.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `appuntamento-${day}-${hour}h.ics`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/** Genera il link WhatsApp wa.me precompilato con nome, servizio, giorno e orario */
+export function makeWhatsAppUrl({
+  phone,
+  clientName,
+  day,
+  hour,
+  service,
+  mode = "reminder",
+}: {
+  phone?: string | null;
+  clientName: string;
+  day: string;
+  hour: number;
+  service: string;
+  mode?: "reminder" | "confirm";
+}): string {
+  let clean = (phone ?? "").replace(/[^\d+]/g, "");
+  if (clean.startsWith("00")) {
+    clean = clean.replace(/^00/, "");
+  } else if (clean.startsWith("+")) {
+    clean = clean.replace(/^\+/, "");
+  } else if (clean.length >= 9 && !clean.startsWith("39")) {
+    clean = `39${clean}`;
+  }
+
+  const dayStr = formatDayLong(day);
+  const hourStr = formatHour(hour);
+
+  const text =
+    mode === "confirm"
+      ? `Ciao ${clientName}! Ti confermiamo il tuo appuntamento per *${service}* fissato per *${dayStr}* alle ore *${hourStr}*. A presto! Naïve Studio`
+      : `Ciao ${clientName}! Ti ricordiamo il tuo appuntamento per *${service}* fissato per *${dayStr}* alle ore *${hourStr}*. A presto! Naïve Studio`;
+
+  return `https://wa.me/${clean}?text=${encodeURIComponent(text)}`;
+}
+
