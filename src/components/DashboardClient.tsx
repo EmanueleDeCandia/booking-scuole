@@ -51,6 +51,7 @@ export function DashboardClient({
   }, []);
 
   const markAttendance = async (b: BookingDTO, attendanceStatus: "present" | "absent") => {
+    if (b.status === "cancelled") return;
     const patch: Record<string, unknown> = { attendanceStatus };
     if (attendanceStatus === "present") {
       patch.status = "done";
@@ -100,13 +101,21 @@ export function DashboardClient({
   }, [bookings, filter, q, now, todayISO]);
 
   const quick = async (b: BookingDTO, status: string) => {
+    const patch: Record<string, unknown> = { status };
+    if (status === "cancelled") {
+      patch.attendanceStatus = "pending";
+    }
     const res = await fetch(`/api/bookings/${b.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(patch),
     });
     if (res.ok) {
-      toast.push({ title: status === "done" ? "Completato" : status === "cancelled" ? "Annullato" : "Ripristinato", message: b.clientName, tone: "yellow" });
+      toast.push({
+        title: status === "done" ? "Completato" : status === "cancelled" ? "Annullato" : "Ripristinato",
+        message: b.clientName,
+        tone: status === "cancelled" ? "ink" : "yellow",
+      });
       reload();
     }
   };
@@ -122,15 +131,15 @@ export function DashboardClient({
   const reminders = notifs.filter((n) => n.kind === "reminder");
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 pb-12 sm:px-6">
+    <div className="mx-auto w-full max-w-[96vw] 2xl:max-w-[1750px] px-4 pb-16 sm:px-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[clamp(2.2rem,6vw,4.5rem)] leading-[0.95]">
+          <h1 className="font-display text-[clamp(2.5rem,5.5vw,5rem)] leading-[0.95]">
             Dash<span className="crayon-hl" style={{ ["--hl" as string]: "var(--crayon-red)" }}>board</span>
           </h1>
-          <p className="font-hand mt-2 text-2xl text-ink-soft">Gestisci gli appuntamenti scritti sull&apos;agenda.</p>
+          <p className="font-hand mt-2 text-2xl sm:text-3xl text-ink-soft">Gestisci gli appuntamenti scritti sull&apos;agenda.</p>
         </div>
-        <Link href="/" className="btn btn-red">
+        <Link href="/" className="btn btn-red !py-2.5 !px-5 text-sm sm:text-base font-bold shadow-sketch">
           ✎ Apri l&apos;agenda 3D
         </Link>
       </div>
@@ -243,135 +252,155 @@ export function DashboardClient({
       </div>
 
       {/* lista */}
-      <div className="sketch mt-6 p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-2">
+      <div className="sketch mt-8 p-6 sm:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap gap-2.5">
             {filters.map((f) => (
               <button
                 key={f.id}
                 onClick={() => setFilter(f.id)}
-                className={`tag transition-transform hover:-rotate-1 ${filter === f.id ? "bg-ink text-white" : "bg-white"}`}
+                className={`tag transition-transform hover:-rotate-1 !py-2 !px-4 text-sm sm:text-base font-bold ${
+                  filter === f.id ? "bg-ink text-white shadow-sketch" : "bg-white text-ink"
+                }`}
               >
-                {f.label} <span className="font-display text-xs">{f.n}</span>
+                {f.label} <span className="font-display text-xs sm:text-sm opacity-80">({f.n})</span>
               </button>
             ))}
           </div>
-          <input className="naive max-w-xs" placeholder="cerca cliente, servizio, note…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input
+            className="naive max-w-sm !py-2.5 !px-4 text-sm sm:text-base"
+            placeholder="cerca cliente, servizio, note…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
         </div>
 
-        <div className="mt-4 overflow-x-auto">
-          <table className="w-full min-w-[720px] border-separate border-spacing-y-2">
+        <div className="mt-6 overflow-x-auto">
+          <table className="w-full min-w-[850px] border-separate border-spacing-y-3">
             <thead>
-              <tr className="font-display text-left text-[11px] uppercase tracking-wider text-ink-soft">
-                <th className="px-3">Quando</th>
-                <th className="px-3">Cliente</th>
-                <th className="px-3">Servizio</th>
-                <th className="px-3">Contatti</th>
-                <th className="px-3">Stato</th>
-                <th className="px-3 text-right">Azioni</th>
+              <tr className="font-display text-left text-xs sm:text-sm uppercase tracking-wider text-ink-soft">
+                <th className="px-4 py-2">Quando</th>
+                <th className="px-4 py-2">Cliente</th>
+                <th className="px-4 py-2">Servizio</th>
+                <th className="px-4 py-2">Contatti</th>
+                <th className="px-4 py-2">Stato</th>
+                <th className="px-4 py-2 text-right">Azioni</th>
               </tr>
             </thead>
             <tbody>
               {list.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="font-hand px-3 py-8 text-center text-2xl text-ink-soft">
+                  <td colSpan={6} className="font-hand px-4 py-12 text-center text-3xl text-ink-soft">
                     Niente da mostrare qui ✎
                   </td>
                 </tr>
               )}
-              {list.map((b, i) => (
-                <tr key={b.id} className="bg-white" style={{ transform: `rotate(${i % 2 ? 0.15 : -0.15}deg)` }}>
-                  <td className="rounded-l-xl border-y-2 border-l-2 border-ink px-3 py-2">
-                    <div className="font-hand text-xl leading-none">{formatDayLong(b.day)}</div>
-                    <div className="text-xs uppercase tracking-wider text-ink-soft">ore {formatHour(b.hour)}</div>
-                  </td>
-                  <td className="border-y-2 border-ink px-3 py-2">
-                    <div className="font-hand text-xl leading-none">{b.clientName}</div>
-                    {b.notes && <div className="text-xs text-ink-soft">{b.notes}</div>}
-                  </td>
-                  <td className="border-y-2 border-ink px-3 py-2">
-                    <span className="tag" style={{ background: serviceColor(b.service), color: "#fff" }}>
-                      {b.service}
-                    </span>
-                  </td>
-                  <td className="border-y-2 border-ink px-3 py-2 text-sm">
-                    <div>{b.clientEmail ?? "—"}</div>
-                    <div className="flex items-center gap-1.5 text-ink-soft">
-                      <span>{b.clientPhone || "—"}</span>
-                      {b.clientPhone && (
-                        <a
-                          href={makeWhatsAppUrl({
-                            phone: b.clientPhone,
-                            clientName: b.clientName,
-                            day: b.day,
-                            hour: b.hour,
-                            service: b.service,
-                            mode: "reminder",
-                          })}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="tag !bg-crayon-green !text-white !py-0 !px-1.5 text-[11px] font-bold hover:scale-105"
-                          title="Invia promemoria WhatsApp al cliente (testo precompilato)"
-                        >
-                          💬 WA
-                        </a>
-                      )}
-                    </div>
-                  </td>
-                  <td className="border-y-2 border-ink px-3 py-2">
-                    <StatusPill status={b.status} sent={b.reminderSent} attendance={b.attendanceStatus} />
-                  </td>
-                  <td className="rounded-r-xl border-y-2 border-r-2 border-ink px-3 py-2">
-                    <div className="flex flex-wrap items-center justify-end gap-1.5">
-                      {/* Validazione Presenze / Assenze da parte del gestore */}
-                      {b.status !== "cancelled" && (
-                        <div className="flex items-center gap-1 border-r border-ink/20 pr-1.5">
-                          <button
-                            className={`btn !px-2 !py-0.5 text-[11px] font-bold transition-all ${
-                              b.attendanceStatus === "present"
-                                ? "bg-crayon-green text-white shadow-xs"
-                                : "text-crayon-green hover:bg-crayon-green/20"
-                            }`}
-                            title="Segna presenza dell'allievo"
-                            onClick={() => markAttendance(b, "present")}
-                          >
-                            ✓ Presente
-                          </button>
-                          <button
-                            className={`btn !px-2 !py-0.5 text-[11px] font-bold transition-all ${
-                              b.attendanceStatus === "absent"
-                                ? "bg-crayon-red text-white shadow-xs"
-                                : "text-crayon-red hover:bg-crayon-red/20"
-                            }`}
-                            title="Segna assenza dell'allievo"
-                            onClick={() => markAttendance(b, "absent")}
-                          >
-                            ✗ Assente
-                          </button>
-                        </div>
-                      )}
+              {list.map((b, i) => {
+                const isPast = bookingDateTime(b.day, b.hour) <= now;
+                const isCancelled = b.status === "cancelled";
 
-                      {b.status === "confirmed" && (
-                        <button className="btn !px-2 !py-1" title="Completa" onClick={() => quick(b, "done")}>
-                          ✓
+                return (
+                  <tr key={b.id} className="bg-white hover:bg-paper-aged/30 transition-colors" style={{ transform: `rotate(${i % 2 ? 0.15 : -0.15}deg)` }}>
+                    <td className="rounded-l-xl border-y-2 border-l-2 border-ink px-4 py-3.5">
+                      <div className="font-hand text-2xl sm:text-3xl leading-none text-ink font-bold">{formatDayLong(b.day)}</div>
+                      <div className="text-xs sm:text-sm uppercase tracking-wider text-ink-soft mt-1 font-medium">ore {formatHour(b.hour)}</div>
+                    </td>
+                    <td className="border-y-2 border-ink px-4 py-3.5">
+                      <div className="font-hand text-2xl sm:text-3xl leading-none text-ink">{b.clientName}</div>
+                      {b.notes && <div className="text-xs sm:text-sm text-ink-soft mt-1">“{b.notes}”</div>}
+                    </td>
+                    <td className="border-y-2 border-ink px-4 py-3.5">
+                      <span className="tag text-xs sm:text-sm font-bold !py-1 !px-3 shadow-xs" style={{ background: serviceColor(b.service), color: "#fff" }}>
+                        {b.service}
+                      </span>
+                    </td>
+                    <td className="border-y-2 border-ink px-4 py-3.5 text-sm sm:text-base">
+                      <div className="font-medium text-ink">{b.clientEmail ?? "—"}</div>
+                      <div className="flex items-center gap-2 text-ink-soft mt-1">
+                        <span>{b.clientPhone || "—"}</span>
+                        {b.clientPhone && (
+                          <a
+                            href={makeWhatsAppUrl({
+                              phone: b.clientPhone,
+                              clientName: b.clientName,
+                              day: b.day,
+                              hour: b.hour,
+                              service: b.service,
+                              mode: "reminder",
+                            })}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="tag !bg-crayon-green !text-white !py-0.5 !px-2 text-xs font-bold hover:scale-105"
+                            title="Invia promemoria WhatsApp al cliente (testo precompilato)"
+                          >
+                            💬 WA
+                          </a>
+                        )}
+                      </div>
+                    </td>
+                    <td className="border-y-2 border-ink px-4 py-3.5">
+                      <StatusPill status={b.status} sent={b.reminderSent} attendance={b.attendanceStatus} />
+                    </td>
+                    <td className="rounded-r-xl border-y-2 border-r-2 border-ink px-4 py-3.5">
+                      <div className="flex flex-wrap items-center justify-end gap-2">
+                        {/* Validazione Presenze / Assenze: attiva se la lezione è passata e NON annullata */}
+                        {!isCancelled && (
+                          <div className="flex items-center gap-1.5 border-r border-ink/20 pr-2">
+                            {isPast ? (
+                              <>
+                                <button
+                                  className={`btn !px-2.5 !py-1 text-xs sm:text-sm font-bold uppercase transition-all ${
+                                    b.attendanceStatus === "present"
+                                      ? "bg-crayon-green text-white shadow-xs"
+                                      : "text-crayon-green hover:bg-crayon-green/20"
+                                  }`}
+                                  title="Segna presenza dell'allievo"
+                                  onClick={() => markAttendance(b, "present")}
+                                >
+                                  ✓ Presente
+                                </button>
+                                <button
+                                  className={`btn !px-2.5 !py-1 text-xs sm:text-sm font-bold uppercase transition-all ${
+                                    b.attendanceStatus === "absent"
+                                      ? "bg-crayon-red text-white shadow-xs"
+                                      : "text-crayon-red hover:bg-crayon-red/20"
+                                  }`}
+                                  title="Segna assenza dell'allievo"
+                                  onClick={() => markAttendance(b, "absent")}
+                                >
+                                  ✗ Assente
+                                </button>
+                              </>
+                            ) : (
+                              <span className="tag bg-paper-aged/80 text-ink-soft !py-1 !px-2 text-xs border border-dashed border-ink/30 font-medium" title="La lezione non è ancora iniziata">
+                                ⏳ In arrivo
+                              </span>
+                            )}
+                          </div>
+                        )}
+
+                        {b.status === "confirmed" && (
+                          <button className="btn !px-3 !py-1 text-sm font-bold" title="Completa" onClick={() => quick(b, "done")}>
+                            ✓
+                          </button>
+                        )}
+                        {!isCancelled ? (
+                          <button className="btn !px-3 !py-1 text-sm font-bold text-ink-soft hover:text-crayon-red" title="Annulla prenotazione" onClick={() => quick(b, "cancelled")}>
+                            ✕
+                          </button>
+                        ) : (
+                          <button className="btn btn-yellow !px-3 !py-1 text-xs sm:text-sm font-bold shadow-xs" title="Ripristina prenotazione" onClick={() => quick(b, "confirmed")}>
+                            ↺ Ripristina
+                          </button>
+                        )}
+                        <button className="btn !px-3 !py-1 text-sm font-bold" title="Modifica dettagli" onClick={() => setTarget({ day: b.day, hour: b.hour, booking: b })}>
+                          ✎
                         </button>
-                      )}
-                      {b.status !== "cancelled" ? (
-                        <button className="btn !px-2 !py-1" title="Annulla" onClick={() => quick(b, "cancelled")}>
-                          ✕
-                        </button>
-                      ) : (
-                        <button className="btn !px-2 !py-1" title="Ripristina" onClick={() => quick(b, "confirmed")}>
-                          ↺
-                        </button>
-                      )}
-                      <button className="btn !px-2 !py-1" title="Modifica" onClick={() => setTarget({ day: b.day, hour: b.hour, booking: b })}>
-                        ✎
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -408,37 +437,40 @@ export function DashboardClient({
 
 function Stat({ label, value, bg, rot }: { label: string; value: number; bg: string; rot: string }) {
   return (
-    <div className={`sketch p-4 ${bg}`} style={{ transform: `rotate(${rot})` }}>
-      <div className="font-display text-[11px] uppercase tracking-wider">{label}</div>
-      <div className="font-display mt-1 text-5xl leading-none">{value}</div>
+    <div className={`sketch p-5 sm:p-6 ${bg}`} style={{ transform: `rotate(${rot})` }}>
+      <div className="font-display text-xs sm:text-sm uppercase tracking-wider font-bold opacity-90">{label}</div>
+      <div className="font-display mt-1 text-5xl sm:text-6xl leading-none">{value}</div>
     </div>
   );
 }
 
 function StatusPill({ status, sent, attendance }: { status: string; sent: boolean; attendance?: string }) {
   const map: Record<string, { l: string; c: string }> = {
-    confirmed: { l: "confermato", c: "bg-crayon-teal" },
+    confirmed: { l: "confermato", c: "bg-crayon-teal text-white" },
     done: { l: "fatto", c: "bg-crayon-green text-white" },
     cancelled: { l: "annullato", c: "bg-ink text-white" },
   };
-  const s = map[status] ?? { l: status, c: "bg-white" };
+  const s = map[status] ?? { l: status, c: "bg-white text-ink" };
+  const isCancelled = status === "cancelled";
+
   return (
     <div className="flex flex-col items-start gap-1">
-      <div className="flex flex-wrap items-center gap-1">
-        <span className={`tag ${s.c}`}>{s.l}</span>
-        {attendance === "present" && (
-          <span className="tag bg-crayon-green text-white !py-0 !px-1.5 text-[10px] font-bold">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className={`tag font-bold !py-0.5 !px-2.5 text-xs sm:text-sm ${s.c}`}>{s.l}</span>
+        {/* SE qualcuno ha annullato NON può essere Presente */}
+        {!isCancelled && attendance === "present" && (
+          <span className="tag bg-crayon-green text-white !py-0.5 !px-2 text-xs sm:text-sm font-bold shadow-xs">
             ✓ Presente
           </span>
         )}
-        {attendance === "absent" && (
-          <span className="tag bg-crayon-red text-white !py-0 !px-1.5 text-[10px] font-bold">
+        {!isCancelled && attendance === "absent" && (
+          <span className="tag bg-crayon-red text-white !py-0.5 !px-2 text-xs sm:text-sm font-bold shadow-xs">
             ✗ Assente
           </span>
         )}
       </div>
       {status === "confirmed" && (
-        <span className="text-[10px] uppercase tracking-wider text-ink-soft">
+        <span className="text-[11px] sm:text-xs uppercase tracking-wider text-ink-soft">
           {sent ? "⏰ promemoria inviato" : "⏰ promemoria in attesa"}
         </span>
       )}

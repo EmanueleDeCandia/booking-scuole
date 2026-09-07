@@ -219,7 +219,7 @@ function StudentProfileClient() {
   const stats = profileData?.stats || { total: 0, present: 0, absent: 0, upcoming: 0, cancelled: 0 };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+    <div className="mx-auto max-w-[96vw] 2xl:max-w-[1750px] px-4 py-6 sm:px-8">
       {/* Intestazione Profilo & Scheda Iscrizione */}
       <div className="card-sketch bg-white/95 p-6 shadow-sketch sm:p-8">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">

@@ -132,14 +132,14 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
   const freeSlots = 7 * 11 - weekBookings.length;
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 pb-10 sm:px-6">
+    <div className="mx-auto w-full max-w-[96vw] 2xl:max-w-[1750px] px-4 pb-12 sm:px-8">
       {/* intestazione */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-[clamp(2.2rem,6vw,4.5rem)] leading-[0.95]">
+          <h1 className="font-display text-[clamp(2.5rem,5.5vw,5rem)] leading-[0.95]">
             Agenda <span className="crayon-hl" style={{ ["--hl" as string]: "var(--crayon-teal)" }}>3D</span>
           </h1>
-          <p className="font-hand mt-2 text-2xl text-ink-soft">
+          <p className="font-hand mt-2 text-2xl sm:text-3xl text-ink-soft">
             {viewMode === "agenda3d"
               ? "Sfoglia con la penna, tocca uno slot libero e prenota. ← → per cambiare settimana."
               : "Fai girare i rulli del cuscinetto 3D con il dito per selezionare data e ora del tuo appuntamento ⚙️"}

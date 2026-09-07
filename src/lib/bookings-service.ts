@@ -172,6 +172,10 @@ export async function updateBooking(
     ...patch,
     updatedAt: new Date(),
   };
+  // Se la prenotazione è annullata, non può mai essere segnata come 'present'
+  if (targetStatus === "cancelled") {
+    updateData.attendanceStatus = "pending";
+  }
   if (isMoved) {
     updateData.reminderSent = false;
   }

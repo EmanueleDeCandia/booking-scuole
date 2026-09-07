@@ -221,7 +221,7 @@ export function ManagerProfileClient() {
 
   return (
     <div className="min-h-screen bg-[#faf6ee] p-3 sm:p-6 text-ink">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-[96vw] 2xl:max-w-[1750px]">
         {/* Intestazione e Profilo Gestore */}
         <div className="sketch bg-[#fffdfa] p-5 sm:p-6 mb-6 shadow-sm">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5 border-b-2 border-dashed border-ink/20 pb-5">
