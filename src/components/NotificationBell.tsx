@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from "react";
 import type { NotificationDTO } from "@/lib/agenda";
 import { useToast } from "./Toasts";
 
-const POLL_MS = 20_000;
+const POLL_MS = 40_000;
 
 const kindIcon: Record<string, string> = {
   reminder: "⏰",
@@ -14,7 +14,19 @@ const kindIcon: Record<string, string> = {
   updated: "↻",
 };
 
-export function NotificationBell() {
+interface NotificationContextType {
+  items: NotificationDTO[];
+  unread: number;
+  open: boolean;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  perm: NotificationPermission | "unsupported";
+  askPermission: () => Promise<void>;
+  markAll: () => Promise<void>;
+}
+
+const NotificationContext = createContext<NotificationContextType | null>(null);
+
+export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<NotificationDTO[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -82,60 +94,163 @@ export function NotificationBell() {
   };
 
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
-        className="btn relative !px-3"
-        aria-label="Notifiche"
-        title="Notifiche e promemoria"
-      >
-        <span className="text-lg leading-none">🔔</span>
-        {unread > 0 && (
-          <span className="font-hand absolute -top-2 -right-2 grid h-6 min-w-6 place-items-center rounded-full border-2 border-ink bg-crayon-red px-1 text-sm text-white">
-            {unread}
-          </span>
-        )}
-      </button>
+    <NotificationContext.Provider
+      value={{
+        items,
+        unread,
+        open,
+        setOpen,
+        perm,
+        askPermission,
+        markAll,
+      }}
+    >
+      {children}
+    </NotificationContext.Provider>
+  );
+}
 
-      {open && (
-        <div className="sketch wobble-in absolute right-0 z-50 mt-3 w-[340px] max-w-[90vw] p-3">
-          <div className="flex items-center justify-between gap-2 border-b-2 border-dashed border-ink pb-2">
-            <div className="font-display text-sm uppercase">Promemoria</div>
-            <div className="flex gap-2">
-              {perm === "default" && (
-                <button onClick={askPermission} className="tag bg-crayon-yellow hover:rotate-1">
-                  attiva browser
-                </button>
-              )}
-              <button onClick={markAll} className="tag bg-white hover:rotate-1">
-                segna lette
-              </button>
+export function useNotifications() {
+  const ctx = useContext(NotificationContext);
+  if (!ctx) {
+    throw new Error("useNotifications must be used within a NotificationProvider");
+  }
+  return ctx;
+}
+
+/**
+ * Pulsante campanella da inserire nell'header (desktop e mobile).
+ * Cliccandolo apre/chiude la sezione Notifiche a tutta larghezza.
+ */
+export function NotificationBell() {
+  const { unread, open, setOpen } = useNotifications();
+
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen((prev) => !prev)}
+      className={`btn relative !px-2.5 !py-1.5 sm:!px-3 sm:!py-2 transition-all ${
+        open ? "btn-ink border-2 border-ink" : ""
+      }`}
+      aria-label="Notifiche e promemoria"
+      title="Mostra notifiche e promemoria"
+    >
+      <span className="text-base sm:text-lg leading-none">🔔</span>
+      {unread > 0 && (
+        <span className="font-hand absolute -top-1.5 -right-1.5 grid h-5 min-w-5 place-items-center rounded-full border-2 border-ink bg-crayon-red px-1 text-xs text-white">
+          {unread}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/**
+ * Sezione a tutta larghezza che compare direttamente sotto l'header,
+ * spingendo verso il basso il resto della pagina in modo simmetrico e pulito.
+ */
+export function NotificationPanel() {
+  const { items, unread, open, setOpen, perm, askPermission, markAll } = useNotifications();
+
+  if (!open) return null;
+
+  return (
+    <div className="w-full max-w-7xl mx-auto px-3 pb-5 sm:px-8 wobble-in transition-all">
+      <div className="sketch bg-paper-aged border-2 border-ink p-3.5 sm:p-5 shadow-xl w-full">
+        {/* Intestazione della sezione Notifiche */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-dashed border-ink/30 pb-3">
+          <div className="flex items-center gap-2.5">
+            <span className="sketch-sm grid h-9 w-9 sm:h-10 sm:w-10 place-items-center bg-crayon-yellow text-xl sm:text-2xl">
+              🔔
+            </span>
+            <div>
+              <div className="font-display text-base sm:text-xl font-bold uppercase tracking-wide">
+                Notifiche &amp; Promemoria
+              </div>
+              <div className="font-hand text-sm sm:text-base text-ink-soft">
+                {unread > 0 ? (
+                  <span className="text-crayon-red font-bold">{unread} non lette</span>
+                ) : (
+                  "Tutti i promemoria sono stati letti"
+                )}
+              </div>
             </div>
           </div>
-          <ul className="scroll-thin mt-2 max-h-[360px] space-y-2 overflow-y-auto pr-1">
-            {items.length === 0 && (
-              <li className="font-hand p-4 text-center text-xl text-ink-soft">Nessuna notifica… ancora ✎</li>
-            )}
-            {items.map((n) => (
-              <li
-                key={n.id}
-                className={`sketch-sm px-3 py-2 ${n.read ? "bg-white/70 opacity-70" : n.kind === "reminder" ? "bg-crayon-yellow/70" : "bg-white"}`}
+
+          <div className="flex flex-wrap items-center gap-2">
+            {perm === "default" && (
+              <button
+                type="button"
+                onClick={askPermission}
+                className="tag !text-xs !py-1 !px-2.5 bg-crayon-yellow hover:scale-105 font-bold shadow-xs cursor-pointer"
               >
-                <div className="flex items-start gap-2">
-                  <span className="text-lg">{kindIcon[n.kind] ?? "•"}</span>
-                  <div className="min-w-0">
-                    <div className="font-display text-[11px] uppercase">{n.title}</div>
-                    <div className="font-hand text-base leading-tight">{n.message}</div>
-                    <div className="mt-1 text-[10px] uppercase tracking-wider text-ink-soft">
-                      {new Date(n.createdAt).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}
+                Attiva Push Browser
+              </button>
+            )}
+            {items.length > 0 && unread > 0 && (
+              <button
+                type="button"
+                onClick={markAll}
+                className="tag !text-xs !py-1 !px-2.5 bg-white hover:scale-105 border border-ink/30 font-semibold cursor-pointer"
+              >
+                Segna tutte lette
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="btn !px-3 !py-1 text-xs sm:text-sm font-bold border-2 border-ink hover:bg-crayon-red hover:text-white"
+              aria-label="Chiudi notifiche"
+            >
+              ✕ Chiudi
+            </button>
+          </div>
+        </div>
+
+        {/* Lista notifiche a tutta larghezza, responsiva a griglia */}
+        <div className="mt-4 max-h-[420px] overflow-y-auto pr-1 scroll-thin">
+          {items.length === 0 ? (
+            <div className="font-hand p-8 text-center text-xl sm:text-2xl text-ink-soft">
+              Nessuna notifica… ancora ✎
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {items.map((n) => (
+                <div
+                  key={n.id}
+                  className={`sketch-sm p-3.5 border-2 border-ink transition-all ${
+                    n.read
+                      ? "bg-white/70 opacity-75"
+                      : n.kind === "reminder"
+                      ? "bg-crayon-yellow/80 border-crayon-red shadow-sm"
+                      : "bg-white shadow-xs"
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className="text-xl sm:text-2xl shrink-0 mt-0.5">
+                      {kindIcon[n.kind] ?? "•"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-display text-xs uppercase font-bold tracking-wider truncate text-ink">
+                        {n.title}
+                      </div>
+                      <div className="font-hand text-base sm:text-lg leading-tight mt-1 break-words text-ink">
+                        {n.message}
+                      </div>
+                      <div className="mt-2 text-[10px] sm:text-[11px] uppercase font-bold tracking-wider text-ink-soft">
+                        {new Date(n.createdAt).toLocaleString("it-IT", {
+                          dateStyle: "short",
+                          timeStyle: "short",
+                        })}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </li>
-            ))}
-          </ul>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

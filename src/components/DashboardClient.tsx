@@ -131,15 +131,15 @@ export function DashboardClient({
   const reminders = notifs.filter((n) => n.kind === "reminder");
 
   return (
-    <div className="mx-auto w-full max-w-[96vw] 2xl:max-w-[1750px] px-4 pb-16 sm:px-8">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <div className="mx-auto w-full max-w-7xl px-3 pb-16 sm:px-8">
+      <div className="flex flex-wrap items-end justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="font-display text-[clamp(2.5rem,5.5vw,5rem)] leading-[0.95]">
+          <h1 className="font-display text-[clamp(2rem,5vw,4.5rem)] leading-[0.95]">
             Dash<span className="crayon-hl" style={{ ["--hl" as string]: "var(--crayon-red)" }}>board</span>
           </h1>
-          <p className="font-hand mt-2 text-2xl sm:text-3xl text-ink-soft">Gestisci gli appuntamenti scritti sull&apos;agenda.</p>
+          <p className="font-hand mt-1.5 sm:mt-2 text-xl sm:text-3xl text-ink-soft">Gestisci gli appuntamenti scritti sull&apos;agenda.</p>
         </div>
-        <Link href="/" className="btn btn-red !py-2.5 !px-5 text-sm sm:text-base font-bold shadow-sketch">
+        <Link href="/" className="btn btn-red !py-2 !px-3.5 sm:!py-2.5 sm:!px-5 text-xs sm:text-base font-bold shadow-sketch">
           ✎ Apri l&apos;agenda 3D
         </Link>
       </div>
@@ -296,7 +296,9 @@ export function DashboardClient({
                 </tr>
               )}
               {list.map((b, i) => {
-                const isPast = bookingDateTime(b.day, b.hour) <= now;
+                const [y, m, d] = b.day.split("-").map(Number);
+                const slotEnd = new Date(y, m - 1, d, Number(b.hour) + 1, 0, 0);
+                const isPast = now >= slotEnd || b.status === "done";
                 const isCancelled = b.status === "cancelled";
 
                 return (
@@ -326,12 +328,21 @@ export function DashboardClient({
                               day: b.day,
                               hour: b.hour,
                               service: b.service,
-                              mode: "reminder",
+                              mode: b.status === "pending" ? "confirm" : "reminder",
                             })}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="tag !bg-crayon-green !text-white !py-0.5 !px-2 text-xs font-bold hover:scale-105"
-                            title="Invia promemoria WhatsApp al cliente (testo precompilato)"
+                            title={
+                              b.status === "pending"
+                                ? "Invia conferma WhatsApp e imposta lo stato su Confermato"
+                                : "Invia promemoria WhatsApp al cliente (testo precompilato)"
+                            }
+                            onClick={() => {
+                              if (b.status === "pending") {
+                                quick(b, "confirmed");
+                              }
+                            }}
                           >
                             💬 WA
                           </a>
@@ -339,7 +350,7 @@ export function DashboardClient({
                       </div>
                     </td>
                     <td className="border-y-2 border-ink px-4 py-3.5">
-                      <StatusPill status={b.status} sent={b.reminderSent} attendance={b.attendanceStatus} />
+                      <StatusPill status={b.status} sent={b.reminderSent} attendance={b.attendanceStatus} isPast={isPast} />
                     </td>
                     <td className="rounded-r-xl border-y-2 border-r-2 border-ink px-4 py-3.5">
                       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -379,6 +390,15 @@ export function DashboardClient({
                           </div>
                         )}
 
+                        {b.status === "pending" && (
+                          <button
+                            className="btn btn-yellow !px-2.5 !py-1 text-xs sm:text-sm font-bold shadow-xs flex items-center gap-1"
+                            title="Conferma prenotazione"
+                            onClick={() => quick(b, "confirmed")}
+                          >
+                            ✓ Conferma
+                          </button>
+                        )}
                         {b.status === "confirmed" && (
                           <button className="btn !px-3 !py-1 text-sm font-bold" title="Completa" onClick={() => quick(b, "done")}>
                             ✓
@@ -409,6 +429,7 @@ export function DashboardClient({
       {target && (
         <BookingModal
           target={target}
+          allowManagerReschedule={true}
           onClose={() => setTarget(null)}
           onCreated={() => {
             setTarget(null);
@@ -444,8 +465,10 @@ function Stat({ label, value, bg, rot }: { label: string; value: number; bg: str
   );
 }
 
-function StatusPill({ status, sent, attendance }: { status: string; sent: boolean; attendance?: string }) {
+function StatusPill({ status, sent, attendance, isPast }: { status: string; sent: boolean; attendance?: string; isPast: boolean }) {
   const map: Record<string, { l: string; c: string }> = {
+    pending_confirmation: { l: "in attesa di conferma", c: "bg-crayon-yellow text-ink border-2 border-ink font-bold shadow-xs" },
+    pending: { l: "in attesa", c: "bg-crayon-yellow text-ink border-2 border-ink font-bold shadow-xs" },
     confirmed: { l: "confermato", c: "bg-crayon-teal text-white" },
     done: { l: "fatto", c: "bg-crayon-green text-white" },
     cancelled: { l: "annullato", c: "bg-ink text-white" },
@@ -457,21 +480,31 @@ function StatusPill({ status, sent, attendance }: { status: string; sent: boolea
     <div className="flex flex-col items-start gap-1">
       <div className="flex flex-wrap items-center gap-1.5">
         <span className={`tag font-bold !py-0.5 !px-2.5 text-xs sm:text-sm ${s.c}`}>{s.l}</span>
-        {/* SE qualcuno ha annullato NON può essere Presente */}
-        {!isCancelled && attendance === "present" && (
+        {/* SE qualcuno ha annullato NON può MAI essere Presente. Presente scatta solo se la lezione è passata/conclusa */}
+        {!isCancelled && isPast && attendance === "present" && (
           <span className="tag bg-crayon-green text-white !py-0.5 !px-2 text-xs sm:text-sm font-bold shadow-xs">
             ✓ Presente
           </span>
         )}
-        {!isCancelled && attendance === "absent" && (
+        {!isCancelled && isPast && attendance === "absent" && (
           <span className="tag bg-crayon-red text-white !py-0.5 !px-2 text-xs sm:text-sm font-bold shadow-xs">
             ✗ Assente
+          </span>
+        )}
+        {!isCancelled && !isPast && (
+          <span className="tag bg-paper-aged/80 text-ink-soft !py-0.5 !px-2 text-xs font-medium border border-dashed border-ink/30">
+            ⏳ In arrivo
           </span>
         )}
       </div>
       {status === "confirmed" && (
         <span className="text-[11px] sm:text-xs uppercase tracking-wider text-ink-soft">
           {sent ? "⏰ promemoria inviato" : "⏰ promemoria in attesa"}
+        </span>
+      )}
+      {status === "pending" && (
+        <span className="text-[11px] sm:text-xs uppercase tracking-wider text-crayon-red font-bold">
+          ⚠️ da confermare (WhatsApp)
         </span>
       )}
     </div>

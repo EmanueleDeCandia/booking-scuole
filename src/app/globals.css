@@ -18,7 +18,7 @@
   --font-body: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
 }
 
-@theme inline {
+@theme {
   --color-paper: var(--paper);
   --color-ink: var(--ink);
   --color-crayon-red: var(--crayon-red);
@@ -39,6 +39,9 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   min-height: 100%;
+  overflow-x: hidden;
+  max-width: 100vw;
+  width: 100%;
 }
 
 /* grana della carta */
@@ -67,7 +70,8 @@ body > * {
 }
 
 /* riquadro "disegnato a mano" */
-.sketch {
+.sketch,
+.card-sketch {
   border: 2.5px solid var(--ink);
   border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
   background: #fbf7f1;
@@ -84,6 +88,9 @@ body > * {
   border: 2px solid var(--ink);
   border-radius: 255px 15px 225px 15px / 15px 225px 15px 255px;
   background: #fbf7f1;
+}
+.shadow-sketch {
+  box-shadow: 4px 5px 0 0 var(--ink);
 }
 
 /* bottoni naive */

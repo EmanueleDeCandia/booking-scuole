@@ -29,22 +29,27 @@ if (databaseUrl) {
 } else {
   if (!globalForDb.__arenaNextJsPglite) {
     const dataDir = path.join(process.cwd(), ".data", "pglite");
-    fs.mkdirSync(dataDir, { recursive: true });
-    const pidFile = path.join(dataDir, "postmaster.pid");
-    if (fs.existsSync(pidFile)) {
-      try {
-        fs.unlinkSync(pidFile);
-      } catch {}
-    }
     try {
-      globalForDb.__arenaNextJsPglite = new PGlite(dataDir);
-    } catch (e) {
-      console.warn("PGlite on .data/pglite failed, switching to clean instance:", e);
-      try {
-        globalForDb.__arenaNextJsPglite = new PGlite(path.join(process.cwd(), ".data", "pglite_db"));
-      } catch {
-        globalForDb.__arenaNextJsPglite = new PGlite();
+      fs.mkdirSync(dataDir, { recursive: true });
+      const pidFile = path.join(dataDir, "postmaster.pid");
+      if (fs.existsSync(pidFile)) {
+        fs.unlinkSync(pidFile);
       }
+    } catch {}
+
+    try {
+      const client = new PGlite(dataDir);
+      client.waitReady.catch((err) => {
+        console.warn("PGlite dataDir failed, fallback to in-memory:", err);
+        try {
+          fs.rmSync(dataDir, { recursive: true, force: true });
+        } catch {}
+        globalForDb.__arenaNextJsPglite = new PGlite();
+        globalForDb.__arenaDb = drizzlePglite(globalForDb.__arenaNextJsPglite);
+      });
+      globalForDb.__arenaNextJsPglite = client;
+    } catch {
+      globalForDb.__arenaNextJsPglite = new PGlite();
     }
   }
   pgliteClient = globalForDb.__arenaNextJsPglite;
@@ -60,6 +65,14 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export async function ensureDbSchema() {
+  if (pgliteClient) {
+    try {
+      await pgliteClient.waitReady;
+    } catch {
+      // client fallback già gestito
+    }
+  }
+
   if (globalForDb.__arenaSchemaInit) {
     return globalForDb.__arenaSchemaInit;
   }
@@ -153,12 +166,13 @@ export async function ensureDbSchema() {
     }
   })();
 
+  globalForDb.__arenaSchemaInit = initPromise;
+
   try {
     await initPromise;
-    globalForDb.__arenaSchemaInit = initPromise;
     return initPromise;
   } catch (err) {
-    globalForDb.__arenaSchemaInit = undefined; // Non memorizzare la promessa fallita
+    globalForDb.__arenaSchemaInit = undefined; // Riprova in caso di errore
     throw err;
   }
 }

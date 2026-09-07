@@ -113,8 +113,19 @@ export function formatDayLong(day: string): string {
   return `${DAY_NAMES_IT[dow]} ${d.getDate()} ${MONTH_NAMES_IT[d.getMonth()]}`;
 }
 
+const COURSE_COLORS: Record<string, string> = {
+  "Danza Classica Avanzata": "#e8542f",
+  "Modern & Contemporary Jazz": "#4fb3bf",
+  "Pilates & Posturale per Ballerini": "#52a357",
+  "Hip Hop & Urban Choreo (Nuovo In Programma)": "#f2b632",
+  "Hip Hop & Urban Dance Lab": "#7a5cff",
+  "Propedeutica alla Danza Bambini (Nuovo In Programma)": "#a463f2",
+  "Canto & Dizione per Performer": "#3c9a5f",
+};
+
 export function serviceColor(service: string): string {
-  return SERVICES.find((s) => s.id === service)?.color ?? "#e8542f";
+  if (COURSE_COLORS[service]) return COURSE_COLORS[service];
+  return SERVICES.find((s) => s.id === service)?.color ?? "#2f7bbf";
 }
 
 /** Genera il link per aprire direttamente Google Calendar con campi precompilati */

@@ -34,15 +34,18 @@ type Props = {
   onFlipRequest: (dir: 1 | -1) => void;
 };
 
-/* ---------- texture pelle procedurale ---------- */
+/* ---------- texture pelle procedurale con caching ---------- */
+let cachedLeatherTexture: THREE.CanvasTexture | null = null;
+
 function makeLeatherTexture(): THREE.CanvasTexture {
+  if (cachedLeatherTexture) return cachedLeatherTexture;
   const c = document.createElement("canvas");
   c.width = 512;
   c.height = 512;
   const ctx = c.getContext("2d")!;
   ctx.fillStyle = "#a35a2b";
   ctx.fillRect(0, 0, 512, 512);
-  for (let i = 0; i < 26000; i++) {
+  for (let i = 0; i < 2500; i++) {
     const x = Math.random() * 512;
     const y = Math.random() * 512;
     const a = Math.random();
@@ -55,6 +58,7 @@ function makeLeatherTexture(): THREE.CanvasTexture {
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(3, 2);
   t.colorSpace = THREE.SRGBColorSpace;
+  cachedLeatherTexture = t;
   return t;
 }
 

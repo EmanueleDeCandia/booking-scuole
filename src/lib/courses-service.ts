@@ -1,6 +1,12 @@
-import { db, ensureDbSchema } from "@/db";
-import { courses, courseVotes, bookings, users, type Course, type NewCourse } from "@/db/schema";
-import { eq, desc, sql, and } from "drizzle-orm";
+import {
+  firestore,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+} from "./firestore";
 
 export type CourseDTO = {
   id: number;
@@ -18,108 +24,149 @@ export type CourseDTO = {
   createdAt: string;
 };
 
-export function toCourseDTO(c: Course): CourseDTO {
-  const appealRating = c.votesCount > 0 ? Math.round((c.votesSum / c.votesCount) * 10) / 10 : 0;
+export function toCourseDTO(c: any): CourseDTO {
+  const votesSum = Number(c.votesSum || 0);
+  const votesCount = Number(c.votesCount || 0);
+  const appealRating =
+    typeof c.appealRating === "number" && c.appealRating > 0
+      ? c.appealRating
+      : votesCount > 0
+      ? Math.round((votesSum / votesCount) * 10) / 10
+      : 8.5;
+
   return {
-    id: c.id,
-    title: c.title,
-    description: c.description,
-    instructor: c.instructor,
-    category: c.category,
-    color: c.color,
-    maxCapacity: c.maxCapacity,
-    price: c.price,
+    id: typeof c.id === "number" ? c.id : parseInt(c.id, 10) || 1,
+    title: c.title || "",
+    description: c.description ?? null,
+    instructor: c.instructor || "Docente Scuola",
+    category: c.category || "Danza",
+    color: c.color || "#e8542f",
+    maxCapacity: Number(c.maxCapacity ?? 15),
+    price: c.price !== undefined && c.price !== null ? Number(c.price) : 50,
     status: (c.status as "active" | "upcoming") || "active",
-    votesSum: c.votesSum,
-    votesCount: c.votesCount,
+    votesSum,
+    votesCount,
     appealRating,
-    createdAt: c.createdAt.toISOString(),
+    createdAt: typeof c.createdAt === "string" ? c.createdAt : new Date(c.createdAt || Date.now()).toISOString(),
   };
 }
 
-export async function ensureCoursesSeed() {
-  await ensureDbSchema();
-  const existing = await db.select({ count: sql<number>`count(*)::int` }).from(courses);
-  if ((existing[0]?.count ?? 0) === 0) {
-    const initial: NewCourse[] = [
-      {
-        title: "Danza Classica Avanzata",
-        description: "Tecnica delle punte, repertorio e sbarra a terra.",
-        instructor: "M° Roberto Bolle",
-        category: "Balletto",
-        color: "#e8542f",
-        maxCapacity: 15,
-        price: 70,
-        status: "active",
-        votesSum: 48,
-        votesCount: 5,
-      },
-      {
-        title: "Modern & Contemporary Jazz",
-        description: "Espressione corporea, floorwork e coreografia fluida.",
-        instructor: "Docente Elena Sala",
-        category: "Modern",
-        color: "#4fb3bf",
-        maxCapacity: 18,
-        price: 65,
-        status: "active",
-        votesSum: 36,
-        votesCount: 4,
-      },
-      {
-        title: "Pilates & Posturale per Ballerini",
-        description: "Rinforzo del core, mobilità articolare e prevenzione infortuni.",
-        instructor: "M° Claudia Rossi",
-        category: "Fitness",
-        color: "#52a357",
-        maxCapacity: 12,
-        price: 55,
-        status: "active",
-        votesSum: 29,
-        votesCount: 3,
-      },
-      {
-        title: "Hip Hop & Urban Choreo (Nuovo In Programma)",
-        description: "Workshop intensivo di freestyle e urban flow per allievi.",
-        instructor: "Guest Choreographer",
-        category: "Urban",
-        color: "#f2b632",
-        maxCapacity: 20,
-        price: 60,
-        status: "upcoming",
-        votesSum: 76,
-        votesCount: 9,
-      },
-      {
-        title: "Propedeutica alla Danza Bambini (Nuovo In Programma)",
-        description: "Avviamento al ritmo, coordinazione e creatività per bambini 4-6 anni.",
-        instructor: "M° Laura Conti",
-        category: "Propedeutica",
-        color: "#a463f2",
-        maxCapacity: 10,
-        price: 50,
-        status: "upcoming",
-        votesSum: 45,
-        votesCount: 5,
-      },
-    ];
+const gCourses = globalThis as typeof globalThis & { __coursesSeeded?: Promise<void> };
 
-    try {
-      await db.insert(courses).values(initial);
-    } catch (e) {
-      console.warn("Courses seed insertion handled:", e);
-    }
+export async function ensureCoursesSeed() {
+  if (gCourses.__coursesSeeded) {
+    return gCourses.__coursesSeeded;
   }
+
+  gCourses.__coursesSeeded = (async () => {
+    try {
+      const snap = await getDocs(collection(firestore, "courses"));
+      if (snap.size === 0) {
+        const initial = [
+          {
+            id: 1,
+            title: "Danza Classica Avanzata",
+            description: "Tecnica delle punte, repertorio e sbarra a terra.",
+            instructor: "M° Roberto Bolle",
+            category: "Balletto",
+            color: "#e8542f",
+            maxCapacity: 15,
+            price: 70,
+            status: "active",
+            votesSum: 48,
+            votesCount: 5,
+            appealRating: 9.6,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: 2,
+            title: "Modern & Contemporary Jazz",
+            description: "Espressione corporea, floorwork e coreografia fluida.",
+            instructor: "Docente Elena Sala",
+            category: "Modern",
+            color: "#4fb3bf",
+            maxCapacity: 18,
+            price: 65,
+            status: "active",
+            votesSum: 36,
+            votesCount: 4,
+            appealRating: 9.0,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: 3,
+            title: "Pilates & Posturale per Ballerini",
+            description: "Rinforzo del core, allineamento e prevenzione infortuni.",
+            instructor: "Trainer Marco Bellini",
+            category: "Benessere",
+            color: "#52a357",
+            maxCapacity: 12,
+            price: 55,
+            status: "active",
+            votesSum: 50,
+            votesCount: 5,
+            appealRating: 9.7,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: 4,
+            title: "Hip Hop & Urban Dance Lab",
+            description: "Groove, isolazioni, popping e freestyle urbano.",
+            instructor: "Coreografo Dave",
+            category: "Urban",
+            color: "#7a5cff",
+            maxCapacity: 20,
+            price: 60,
+            status: "upcoming",
+            votesSum: 39,
+            votesCount: 4,
+            appealRating: 8.4,
+            createdAt: new Date().toISOString(),
+          },
+          {
+            id: 5,
+            title: "Canto & Dizione per Performer",
+            description: "Tecnica vocale, respirazione diaframmatica e interpretazione scenica.",
+            instructor: "Maestra Maria Rossi",
+            category: "Canto",
+            color: "#3c9a5f",
+            maxCapacity: 10,
+            price: 50,
+            status: "upcoming",
+            votesSum: 45,
+            votesCount: 5,
+            appealRating: 9.0,
+            createdAt: new Date().toISOString(),
+          },
+        ];
+
+        for (const c of initial) {
+          await setDoc(doc(firestore, "courses", String(c.id)), c);
+        }
+      }
+    } catch (e) {
+      console.warn("Courses seed note:", e);
+    }
+  })();
+
+  return gCourses.__coursesSeeded;
 }
 
 export async function listCourses(status?: "active" | "upcoming"): Promise<CourseDTO[]> {
   await ensureCoursesSeed();
-  const rows = await db
-    .select()
-    .from(courses)
-    .where(status ? eq(courses.status, status) : undefined)
-    .orderBy(desc(courses.createdAt));
-  return rows.map(toCourseDTO);
+  const snap = await getDocs(collection(firestore, "courses"));
+  let list: CourseDTO[] = [];
+  snap.forEach((docSnap) => {
+    const data = docSnap.data();
+    list.push(toCourseDTO({ id: docSnap.id, ...data }));
+  });
+
+  if (status) {
+    list = list.filter((c) => c.status === status);
+  }
+
+  list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return list;
 }
 
 export async function createCourse(input: {
@@ -133,65 +180,105 @@ export async function createCourse(input: {
   status?: "active" | "upcoming";
 }): Promise<CourseDTO> {
   await ensureCoursesSeed();
-  const [created] = await db
-    .insert(courses)
-    .values({
-      title: input.title.trim(),
-      description: input.description?.trim() || null,
-      instructor: input.instructor?.trim() || "Maestro della Scuola",
-      category: input.category || "Musica",
-      color: input.color || "#2f7bbf",
-      maxCapacity: input.maxCapacity || 15,
-      price: input.price !== undefined && input.price !== null ? input.price : 50,
-      status: input.status || "active",
-      votesSum: 0,
-      votesCount: 0,
-    })
-    .returning();
+  const snap = await getDocs(collection(firestore, "courses"));
+  let maxId = 0;
+  snap.forEach((docSnap) => {
+    const d = docSnap.data();
+    const numericId = Number(d.id || docSnap.id);
+    if (!isNaN(numericId) && numericId > maxId) {
+      maxId = numericId;
+    }
+  });
+  const newId = maxId + 1;
 
-  return toCourseDTO(created);
+  const newCourse = {
+    id: newId,
+    title: input.title.trim(),
+    description: input.description?.trim() || null,
+    instructor: input.instructor?.trim() || "Maestro della Scuola",
+    category: input.category || "Musica",
+    color: input.color || "#2f7bbf",
+    maxCapacity: input.maxCapacity || 15,
+    price: input.price !== undefined && input.price !== null ? input.price : 50,
+    status: input.status || "active",
+    votesSum: 0,
+    votesCount: 0,
+    appealRating: 8.5,
+    createdAt: new Date().toISOString(),
+  };
+
+  await setDoc(doc(firestore, "courses", String(newId)), newCourse);
+  return toCourseDTO(newCourse);
 }
 
 export async function submitCourseVote(input: {
   courseId: number;
   rating: number; // 1 a 10
   userId?: string | null;
-}): Promise<CourseDTO> {
+  voterToken?: string | null;
+}): Promise<{ course: CourseDTO; isUpdate: boolean; previousRating: number | null }> {
   await ensureCoursesSeed();
   const rating = Math.max(1, Math.min(10, Math.round(input.rating)));
-
-  let validUserId: string | null = null;
-  if (input.userId) {
-    try {
-      const foundUser = await db.select({ id: users.id }).from(users).where(eq(users.id, input.userId)).limit(1);
-      if (foundUser.length > 0) {
-        validUserId = foundUser[0].id;
-      }
-    } catch {
-      validUserId = null;
-    }
+  const docRef = doc(firestore, "courses", String(input.courseId));
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) {
+    throw new Error("CORSO_NON_TROVATO");
   }
 
+  const courseData = snap.data();
+  const currentVotesSum = Number(courseData.votesSum || 0);
+  const currentVotesCount = Number(courseData.votesCount || 0);
+
+  const rawKey = (input.userId || input.voterToken || "anon_user").trim();
+  const voterKey = rawKey.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const voteDocRef = doc(firestore, "course_votes", `${input.courseId}_${voterKey}`);
+  const existingVoteSnap = await getDoc(voteDocRef);
+
+  let isUpdate = false;
+  let previousRating: number | null = null;
+  let newVotesSum = currentVotesSum;
+  let newVotesCount = currentVotesCount;
+
+  if (existingVoteSnap.exists()) {
+    isUpdate = true;
+    previousRating = Number(existingVoteSnap.data().rating || 0);
+    // Sostituisce il vecchio voto con il nuovo, il conteggio totale votanti non aumenta
+    newVotesSum = currentVotesSum - previousRating + rating;
+    newVotesCount = currentVotesCount;
+  } else {
+    // Nuovo voto: incrementa di 1
+    newVotesSum = currentVotesSum + rating;
+    newVotesCount = currentVotesCount + 1;
+  }
+
+  const newAppeal = newVotesCount > 0 ? Math.round((newVotesSum / newVotesCount) * 10) / 10 : 0;
+
+  await updateDoc(docRef, {
+    votesSum: newVotesSum,
+    votesCount: newVotesCount,
+    appealRating: newAppeal,
+    updatedAt: new Date().toISOString(),
+  });
+
   try {
-    await db.insert(courseVotes).values({
+    await setDoc(voteDocRef, {
+      id: `${input.courseId}_${voterKey}`,
       courseId: input.courseId,
-      userId: validUserId,
+      userId: input.userId || null,
+      voterToken: input.voterToken || null,
       rating,
+      updatedAt: new Date().toISOString(),
     });
-  } catch {}
+  } catch (err) {
+    console.warn("Could not save individual vote doc:", err);
+  }
 
-  const [updated] = await db
-    .update(courses)
-    .set({
-      votesSum: sql`votes_sum + ${rating}`,
-      votesCount: sql`votes_count + 1`,
-      updatedAt: new Date(),
-    })
-    .where(eq(courses.id, input.courseId))
-    .returning();
-
-  if (!updated) throw new Error("CORSO_NON_TROVATO");
-  return toCourseDTO(updated);
+  const updatedSnap = await getDoc(docRef);
+  return {
+    course: toCourseDTO({ id: input.courseId, ...updatedSnap.data() }),
+    isUpdate,
+    previousRating,
+  };
 }
 
 export async function getManagerDashboardMetrics() {
@@ -201,15 +288,23 @@ export async function getManagerDashboardMetrics() {
   const activeCourses = allCourses.filter((c) => c.status === "active");
   const upcomingCourses = allCourses.filter((c) => c.status === "upcoming");
 
-  // Totale studenti
-  const students = await db
-    .select()
-    .from(users)
-    .where(eq(users.role, "user"))
-    .orderBy(desc(users.createdAt));
+  // Totale studenti da Firestore users
+  const userSnap = await getDocs(collection(firestore, "users"));
+  const students: any[] = [];
+  userSnap.forEach((d) => {
+    const data = d.data();
+    const role = data.role === "manager" ? "manager" : "user";
+    if (role === "user") {
+      students.push({ id: d.id, ...data, role });
+    }
+  });
 
-  // Tutte le prenotazioni per statistiche corsi e presenze
-  const allBookings = await db.select().from(bookings);
+  // Tutte le prenotazioni da Firestore bookings
+  const bookingsSnap = await getDocs(collection(firestore, "bookings"));
+  const allBookings: any[] = [];
+  bookingsSnap.forEach((d) => {
+    allBookings.push({ id: d.id, ...d.data() });
+  });
 
   // Mese corrente ISO
   const now = new Date();
@@ -250,7 +345,7 @@ export async function getManagerDashboardMetrics() {
       attendancesPerCourse[courseKey].totalPresences += 1;
       totalOverallPresences += 1;
 
-      if (b.day.startsWith(currentMonthPrefix)) {
+      if (b.day && b.day.startsWith(currentMonthPrefix)) {
         attendancesPerCourse[courseKey].thisMonthPresences += 1;
         totalMonthPresences += 1;
       }

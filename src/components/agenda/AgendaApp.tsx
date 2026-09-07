@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -132,55 +133,66 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
   const freeSlots = 7 * 11 - weekBookings.length;
 
   return (
-    <div className="mx-auto w-full max-w-[96vw] 2xl:max-w-[1750px] px-4 pb-12 sm:px-8">
+    <div className="mx-auto w-full max-w-7xl px-3 sm:px-8 pb-12">
       {/* intestazione */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="font-display text-[clamp(2.5rem,5.5vw,5rem)] leading-[0.95]">
+          <h1 className="font-display text-[clamp(2rem,5vw,4.5rem)] leading-[0.95]">
             Agenda <span className="crayon-hl" style={{ ["--hl" as string]: "var(--crayon-teal)" }}>3D</span>
           </h1>
-          <p className="font-hand mt-2 text-2xl sm:text-3xl text-ink-soft">
+          <p className="font-hand mt-1.5 sm:mt-2 text-xl sm:text-3xl text-ink-soft">
             {viewMode === "agenda3d"
               ? "Sfoglia con la penna, tocca uno slot libero e prenota. ← → per cambiare settimana."
               : "Fai girare i rulli del cuscinetto 3D con il dito per selezionare data e ora del tuo appuntamento ⚙️"}
           </p>
         </div>
-        {viewMode === "agenda3d" && (
-          <div className="flex flex-wrap items-center gap-2">
-            <button className="btn" onClick={() => requestFlip(-1)} disabled={flipping}>
-              ← Prec.
-            </button>
-            <button className="btn btn-yellow" onClick={goToday} disabled={flipping}>
-              Oggi
-            </button>
-            <button className="btn" onClick={() => requestFlip(1)} disabled={flipping}>
-              Succ. →
-            </button>
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+          <Link
+            href="/corsi"
+            className="btn btn-yellow !py-1.5 !px-2.5 sm:!py-2 sm:!px-3.5 text-xs sm:text-sm font-bold shadow-sketch flex items-center gap-1"
+            title="Guarda i nuovi corsi e vota l'appeal"
+          >
+            <span>🎭</span> Nuovi Corsi &amp; Vota
+          </Link>
+          {viewMode === "agenda3d" && (
+            <>
+              <button className="btn !py-1.5 !px-2.5 sm:!py-2 sm:!px-3.5 text-xs sm:text-sm" onClick={() => requestFlip(-1)} disabled={flipping}>
+                ← Prec.
+              </button>
+              <button className="btn btn-yellow !py-1.5 !px-2.5 sm:!py-2 sm:!px-3.5 text-xs sm:text-sm" onClick={goToday} disabled={flipping}>
+                Oggi
+              </button>
+              <button className="btn !py-1.5 !px-2.5 sm:!py-2 sm:!px-3.5 text-xs sm:text-sm" onClick={() => requestFlip(1)} disabled={flipping}>
+                Succ. →
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* selettore vista + etichette */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
         {/* Selettore modalità: Diario da Tavolo 3D vs Cuscinetto Mobile 3D */}
-        <div className="inline-flex rounded-xl border-2 border-ink bg-white/90 p-1 shadow-sm">
+        <div className="inline-flex rounded-xl border-2 border-ink bg-white/90 p-1 shadow-sm max-w-full">
           <button
             type="button"
             onClick={() => setViewMode("agenda3d")}
-            className={`tag !py-1 !px-3 text-xs font-bold transition-transform ${
+            className={`tag !py-1 !px-2.5 sm:!px-3 text-xs font-bold transition-transform ${
               viewMode === "agenda3d" ? "bg-ink text-white" : "bg-transparent text-ink hover:rotate-1"
             }`}
           >
-            📖 Diario da Tavolo 3D
+            <span className="sm:hidden">📖 Diario 3D</span>
+            <span className="hidden sm:inline">📖 Diario da Tavolo 3D</span>
           </button>
           <button
             type="button"
             onClick={() => setViewMode("roller")}
-            className={`tag !py-1 !px-3 text-xs font-bold transition-transform ${
+            className={`tag !py-1 !px-2.5 sm:!px-3 text-xs font-bold transition-transform ${
               viewMode === "roller" ? "bg-crayon-teal text-white" : "bg-transparent text-ink hover:-rotate-1"
             }`}
           >
-            ⚙️ Cuscinetto Mobile 3D
+            <span className="sm:hidden">⚙️ Cuscinetto</span>
+            <span className="hidden sm:inline">⚙️ Cuscinetto Mobile 3D</span>
           </button>
         </div>
 
@@ -251,11 +263,11 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
       )}
 
       {/* legenda + prossimi */}
-      <div className="mt-6 grid gap-5 md:grid-cols-3">
-        <div className="sketch p-5 md:col-span-2">
-          <div className="font-display scribble-under inline-block text-lg uppercase">Questa settimana</div>
+      <div className="mt-6 grid gap-4 sm:gap-5 md:grid-cols-3">
+        <div className="sketch p-3.5 sm:p-5 md:col-span-2">
+          <div className="font-display scribble-under inline-block text-base sm:text-lg uppercase">Questa settimana</div>
           {weekBookings.length === 0 ? (
-            <p className="font-hand mt-3 text-2xl text-ink-soft">Nessun appuntamento: la pagina è tutta tua ✎</p>
+            <p className="font-hand mt-3 text-xl sm:text-2xl text-ink-soft">Nessun appuntamento: la pagina è tutta tua ✎</p>
           ) : (
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
               {weekBookings

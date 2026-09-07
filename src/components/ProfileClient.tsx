@@ -163,9 +163,11 @@ function StudentProfileClient() {
   // Apri modale per nuovo corso
   const handleBookNew = () => {
     const today = toISODate(new Date());
+    const curH = new Date().getHours();
+    const nextH = Math.min(18, Math.max(8, curH >= 18 ? 9 : curH + 1));
     setTargetSlot({
       day: today,
-      hour: 10,
+      hour: nextH,
       booking: null,
     });
   };
@@ -191,20 +193,20 @@ function StudentProfileClient() {
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-md px-4 py-16 text-center">
-        <div className="card-sketch bg-white/95 p-8 shadow-sketch">
-          <span className="sketch-sm inline-grid h-14 w-14 place-items-center bg-crayon-yellow text-3xl text-ink">
+      <div className="mx-auto w-full max-w-md px-3 py-8 sm:px-4 sm:py-16 text-center">
+        <div className="sketch bg-white/95 p-5 sm:p-8">
+          <span className="sketch-sm inline-grid h-12 w-12 sm:h-14 sm:w-14 place-items-center bg-crayon-yellow text-2xl sm:text-3xl text-ink">
             👤
           </span>
-          <h1 className="font-display mt-4 text-3xl text-ink">Accedi al Profilo</h1>
-          <p className="font-hand mt-2 text-lg text-ink-soft">
+          <h1 className="font-display mt-3 sm:mt-4 text-2xl sm:text-3xl text-ink">Accedi al Profilo</h1>
+          <p className="font-hand mt-1.5 sm:mt-2 text-base sm:text-lg text-ink-soft">
             Per visualizzare le tue iscrizioni, presenze e gestire i corsi, effettua l&apos;accesso o crea un nuovo account.
           </p>
-          <div className="mt-6 flex flex-col gap-2">
-            <Link href="/auth/login" className="btn btn-ink justify-center py-2.5 font-bold">
+          <div className="mt-5 sm:mt-6 flex flex-col gap-2">
+            <Link href="/auth/login" className="btn btn-ink justify-center py-2 sm:py-2.5 font-bold text-sm sm:text-base">
               Accedi al tuo Account
             </Link>
-            <Link href="/auth/register" className="btn justify-center py-2 text-sm font-semibold">
+            <Link href="/auth/register" className="btn justify-center py-2 text-xs sm:text-sm font-semibold">
               Iscriviti come Allievo
             </Link>
           </div>
@@ -219,9 +221,9 @@ function StudentProfileClient() {
   const stats = profileData?.stats || { total: 0, present: 0, absent: 0, upcoming: 0, cancelled: 0 };
 
   return (
-    <div className="mx-auto max-w-[96vw] 2xl:max-w-[1750px] px-4 py-6 sm:px-8">
+    <div className="mx-auto w-full max-w-7xl px-3 py-4 sm:px-8 sm:py-6">
       {/* Intestazione Profilo & Scheda Iscrizione */}
-      <div className="card-sketch bg-white/95 p-6 shadow-sketch sm:p-8">
+      <div className="sketch bg-white/95 p-4 sm:p-8">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
             {/* Foto Profilo con Upload */}
@@ -298,6 +300,9 @@ function StudentProfileClient() {
             >
               + Prenota Corso ✎
             </button>
+            <Link href="/corsi" className="btn btn-teal text-xs font-bold">
+              🎭 Corsi in Programma
+            </Link>
             <button
               type="button"
               onClick={signOut}
@@ -389,6 +394,23 @@ function StudentProfileClient() {
           <p className="font-display mt-1 text-[11px] uppercase tracking-wider text-ink-soft">
             In Programma
           </p>
+        </div>
+      </div>
+
+      {/* Banner Nuovi Corsi in Programma & Sondaggio Appeal */}
+      <div className="mt-6 sketch-sm border-2 border-dashed border-crayon-teal bg-crayon-teal/10 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <span className="font-display text-sm font-bold text-ink uppercase flex items-center gap-1.5">
+              <span>🎭</span> Nuovi Corsi in Programma &amp; Sondaggio Appeal
+            </span>
+            <p className="font-hand text-base sm:text-lg text-ink-soft mt-0.5">
+              Scopri le nuove discipline proposte dalla scuola e vota l&apos;indice di gradimento per aiutarci ad attivarle!
+            </p>
+          </div>
+          <Link href="/corsi" className="btn btn-teal text-xs font-bold">
+            Esplora e Vota i Corsi 🌟
+          </Link>
         </div>
       </div>
 
@@ -520,10 +542,10 @@ function StudentProfileClient() {
                       <button
                         type="button"
                         onClick={() => handleCancelBooking(b.id)}
-                        className="btn !px-3 !py-1 text-xs font-medium text-crayon-red hover:bg-crayon-red/10"
-                        title="Annulla la prenotazione"
+                        className="btn !px-3 !py-1 text-xs font-bold text-white bg-crayon-red hover:bg-crayon-red/80 shadow-xs"
+                        title="Annulla la prenotazione di questa lezione"
                       >
-                        ✕ Annulla
+                        ✕ Annulla Corso
                       </button>
                     </div>
                   </div>

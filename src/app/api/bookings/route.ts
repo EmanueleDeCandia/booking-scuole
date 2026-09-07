@@ -42,13 +42,20 @@ export async function POST(req: NextRequest) {
       clientPhone: body.clientPhone ? String(body.clientPhone) : null,
       service,
       notes: body.notes ? String(body.notes) : null,
+      status: body.status ? String(body.status) : undefined,
       reminderMinutes: body.reminderMinutes ? Number(body.reminderMinutes) : 60,
       attendanceStatus: body.attendanceStatus ? String(body.attendanceStatus) : "pending",
     });
     return Response.json({ booking }, { status: 201 });
   } catch (e) {
     if (e instanceof Error && e.message === "SLOT_TAKEN") {
-      return Response.json({ error: "Questo slot è già prenotato" }, { status: 409 });
+      return Response.json({ error: "Questo slot è già prenotato da un altro allievo" }, { status: 409 });
+    }
+    if (e instanceof Error && e.message === "PAST_DATE_NOT_ALLOWED") {
+      return Response.json({ error: "Non puoi prenotare una lezione per una data già passata" }, { status: 400 });
+    }
+    if (e instanceof Error && e.message === "PAST_HOUR_NOT_ALLOWED") {
+      return Response.json({ error: "L'orario selezionato per oggi è già trascorso" }, { status: 400 });
     }
     console.error(e);
     return Response.json({ error: "Errore interno" }, { status: 500 });

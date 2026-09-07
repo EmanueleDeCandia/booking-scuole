@@ -205,9 +205,11 @@ export function ManagerProfileClient() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Errore registrazione voto");
-
-      toast.show(`⭐ Valutazione registrata: ${rating}/10!`, "info");
+      if (data.isUpdate) {
+        toast.show(`🔄 Valutazione aggiornata a ${rating}/10!`, "info");
+      } else {
+        toast.show(`⭐ Valutazione registrata: ${rating}/10!`, "info");
+      }
       await loadAll();
     } catch (err: any) {
       toast.show(err.message || "Errore voto appeal", "error");
@@ -220,10 +222,10 @@ export function ManagerProfileClient() {
   const upcomingCoursesList = courses.filter((c) => c.status === "upcoming");
 
   return (
-    <div className="min-h-screen bg-[#faf6ee] p-3 sm:p-6 text-ink">
-      <div className="mx-auto max-w-[96vw] 2xl:max-w-[1750px]">
+    <div className="min-h-screen bg-[#faf6ee] p-2.5 sm:p-6 text-ink">
+      <div className="mx-auto w-full max-w-7xl">
         {/* Intestazione e Profilo Gestore */}
-        <div className="sketch bg-[#fffdfa] p-5 sm:p-6 mb-6 shadow-sm">
+        <div className="sketch bg-[#fffdfa] p-4 sm:p-6 mb-6 shadow-sm">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5 border-b-2 border-dashed border-ink/20 pb-5">
             <div className="flex items-center gap-4">
               {/* Foto Profilo con caricamento rapido */}

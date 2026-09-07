@@ -124,9 +124,11 @@ function Roller({ label, items, selectedIndex, onChange, colorTone = "var(--cray
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
         onWheel={handleWheel}
-        className="sketch-sm relative h-[170px] w-full cursor-grab active:cursor-grabbing overflow-hidden bg-[#fffdf7] shadow-inner"
+        className="sketch-sm relative h-[170px] w-full cursor-grab active:cursor-grabbing overflow-hidden bg-[#fffdf7] shadow-inner select-none touch-none"
         style={{
           perspective: "800px",
+          WebkitPerspective: "800px",
+          contain: "paint",
           boxShadow: "inset 0 4px 10px rgba(0,0,0,0.15), inset 0 -4px 10px rgba(0,0,0,0.15)",
         }}
       >
@@ -142,7 +144,7 @@ function Roller({ label, items, selectedIndex, onChange, colorTone = "var(--cray
 
         {/* Cilindro rotante in 3D */}
         <div
-          className="absolute inset-0 flex items-center justify-center"
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
           style={{
             transformStyle: "preserve-3d",
             transform: `rotateX(${rotation}deg)`,
@@ -164,6 +166,7 @@ function Roller({ label, items, selectedIndex, onChange, colorTone = "var(--cray
                 style={{
                   transform: `rotateX(${itemAngle}deg) translateZ(${RADIUS}px)`,
                   backfaceVisibility: "hidden",
+                  WebkitBackfaceVisibility: "hidden",
                 }}
               >
                 <div
@@ -173,11 +176,11 @@ function Roller({ label, items, selectedIndex, onChange, colorTone = "var(--cray
                       : "font-hand text-ink/50 scale-95"
                   }`}
                 >
-                  <div className={isSelected ? "text-base font-bold" : "text-lg"}>
+                  <div className={isSelected ? "text-sm sm:text-base font-bold whitespace-nowrap" : "text-base sm:text-lg whitespace-nowrap"}>
                     {item.label}
                   </div>
                   {item.sub && (
-                    <div className="text-[10px] uppercase tracking-wider text-ink-soft">
+                    <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-ink-soft truncate max-w-full">
                       {item.sub}
                     </div>
                   )}
@@ -310,14 +313,14 @@ export function MobileRollerPicker({ bookings, onSelectSlot }: Props) {
   };
 
   return (
-    <div className="sketch relative w-full overflow-hidden bg-[#fdf8f0] p-4 sm:p-6 shadow-md">
+    <div className="sketch relative w-full overflow-hidden bg-[#fdf8f0] p-3 sm:p-6 shadow-md">
       {/* Testata del selettore */}
-      <div className="flex items-center justify-between border-b-2 border-dashed border-ink/20 pb-3">
+      <div className="flex items-center justify-between border-b-2 border-dashed border-ink/20 pb-2.5 sm:pb-3">
         <div>
-          <div className="font-display text-lg uppercase tracking-tight">
+          <div className="font-display text-base sm:text-lg uppercase tracking-tight">
             Selettore a Cuscinetto <span className="crayon-hl" style={{ ["--hl" as string]: "var(--crayon-yellow)" }}>3D</span>
           </div>
-          <p className="font-hand text-base text-ink-soft">
+          <p className="font-hand text-sm sm:text-base text-ink-soft">
             Trascina i rulli o tocca le frecce con il dito per girare il cuscinetto ⚙️
           </p>
         </div>
@@ -327,7 +330,7 @@ export function MobileRollerPicker({ bookings, onSelectSlot }: Props) {
       </div>
 
       {/* Meccanismo dei 3 rulli 3D affiancati */}
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="mt-3.5 sm:mt-4 grid grid-cols-3 gap-1.5 sm:gap-4">
         {/* Rullo 1: Mese */}
         <Roller
           label="Mese"
@@ -357,7 +360,7 @@ export function MobileRollerPicker({ bookings, onSelectSlot }: Props) {
       </div>
 
       {/* Cartellino di Stato dello Slot Selezionato */}
-      <div className="mt-5 rounded-xl border-2 border-ink bg-white p-4 shadow-[4px_4px_0_0_#141210] transition-all">
+      <div className="mt-4 sm:mt-5 rounded-xl border-2 border-ink bg-white p-3 sm:p-4 shadow-[3px_3px_0_0_#141210] sm:shadow-[4px_4px_0_0_#141210] transition-all">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="font-display text-xs uppercase tracking-wider text-ink-soft">

@@ -55,14 +55,14 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="mx-auto max-w-md px-4 py-12">
-      <div className="card-sketch bg-white/95 p-8 shadow-sketch">
-        <div className="mb-6 text-center">
-          <span className="sketch-sm inline-grid h-12 w-12 place-items-center bg-crayon-blue text-2xl text-white">
+    <div className="mx-auto w-full max-w-md px-3 py-6 sm:px-4 sm:py-12">
+      <div className="sketch bg-white/95 p-5 sm:p-8">
+        <div className="mb-5 sm:mb-6 text-center">
+          <span className="sketch-sm inline-grid h-11 w-11 sm:h-12 sm:w-12 place-items-center bg-crayon-blue text-xl sm:text-2xl text-white">
             🔑
           </span>
-          <h1 className="font-display mt-3 text-3xl text-ink">Accedi al Tuo Account</h1>
-          <p className="font-hand text-lg text-ink-soft">
+          <h1 className="font-display mt-3 text-2xl sm:text-3xl text-ink">Accedi al Tuo Account</h1>
+          <p className="font-hand mt-1 text-base sm:text-lg text-ink-soft">
             Gestisci i tuoi corsi, controlla presenze o gestisci la scuola
           </p>
         </div>
