@@ -37,6 +37,12 @@ export function BookingModal({ target, onClose, onCreated, onUpdated, onDeleted 
   const { user } = useAuth();
   const isManager = user?.role === "manager";
   const existing = target.booking;
+  const isOwner = Boolean(
+    user &&
+    existing &&
+    ((existing.userId && existing.userId === user.id) ||
+     (existing.clientEmail && user.email && existing.clientEmail.toLowerCase() === user.email.toLowerCase()))
+  );
 
   const [day, setDay] = useState(target.day);
   const [hour, setHour] = useState(target.hour);
@@ -212,6 +218,63 @@ export function BookingModal({ target, onClose, onCreated, onUpdated, onDeleted 
 
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="btn !px-4 !py-1.5 text-xs font-semibold">
+              Chiudi
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Se uno studente o visitatore clicca su uno slot occupato da un altro studente: SCHERMATA PRIVACY / SLOT RISERVATO
+  if (existing && !isManager && !isOwner) {
+    return (
+      <div className="fixed inset-0 z-[90] grid place-items-center bg-ink/40 p-3 sm:p-4 backdrop-blur-[2px]" onClick={onClose}>
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="sketch wobble-in relative w-full max-w-md bg-[#fff7d6] p-5 sm:p-6"
+          style={{ transform: "rotate(-0.6deg)" }}
+        >
+          <div
+            className="absolute -top-3 left-1/2 h-6 w-28 -translate-x-1/2 rotate-[-2deg] bg-crayon-red/70"
+            style={{ clipPath: "polygon(2% 0, 100% 4%, 98% 100%, 0 96%)" }}
+          />
+          <div className="flex items-start justify-between border-b-2 border-dashed border-ink/20 pb-2">
+            <div>
+              <div className="font-display text-base uppercase text-ink font-bold flex items-center gap-2">
+                <span>🔒 Slot Riservato</span>
+                <span className="tag bg-crayon-red text-white text-[10px] font-bold">Occupato</span>
+              </div>
+              <div className="font-hand mt-1 text-xl text-crayon-red">
+                {formatDayLong(day)} · ore {formatHour(hour)}
+              </div>
+            </div>
+            <button type="button" onClick={onClose} className="btn !px-2.5 !py-0.5 text-sm" aria-label="Chiudi">
+              ✕
+            </button>
+          </div>
+
+          <div className="my-4 rounded-lg border-2 border-dashed border-ink/20 bg-white/85 p-4 text-sm text-ink-soft space-y-3">
+            <div className="flex items-center gap-3">
+              <span className="sketch-sm grid h-10 w-10 shrink-0 place-items-center bg-crayon-teal text-white text-lg font-bold">
+                🩰
+              </span>
+              <div>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-ink-soft block">Corso in programma</span>
+                <span className="font-display text-base text-ink font-bold">{existing.service}</span>
+              </div>
+            </div>
+            <p className="text-xs leading-relaxed text-ink-soft border-t border-dashed border-ink/15 pt-2">
+              Questo orario è già stato prenotato da un allievo della scuola.
+              Per rispetto della privacy e delle scelte individuali, i dati e i contatti degli altri iscritti non sono accessibili né modificabili.
+            </p>
+            <p className="text-xs font-semibold text-crayon-teal">
+              💡 Clicca su un qualsiasi slot orario libero nell&apos;Agenda per prenotare la tua lezione!
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="btn btn-ink !px-4 !py-1.5 text-xs font-semibold">
               Chiudi
             </button>
           </div>
@@ -505,7 +568,7 @@ export function BookingModal({ target, onClose, onCreated, onUpdated, onDeleted 
         <div className="mt-4 flex flex-col gap-2 border-t-2 border-dashed border-ink/20 pt-3 sm:flex-row sm:items-center sm:justify-between">
           {existing ? (
             <div className="flex flex-wrap gap-1.5">
-              {existing.status !== "done" && (
+              {isManager && existing.status !== "done" && (
                 <button
                   type="button"
                   onClick={() => setStatus("done")}
@@ -524,18 +587,20 @@ export function BookingModal({ target, onClose, onCreated, onUpdated, onDeleted 
                   disabled={busy}
                   title="Marca come annullata"
                 >
-                  ✕ Annulla
+                  ✕ Annulla Prenotazione
                 </button>
               )}
-              <button
-                type="button"
-                onClick={remove}
-                className="btn !px-2.5 !py-1 text-xs text-crayon-red border-crayon-red/50 hover:bg-crayon-red hover:text-white"
-                disabled={busy}
-                title="Elimina definitivamente dal database"
-              >
-                🗑 Elimina
-              </button>
+              {isManager && (
+                <button
+                  type="button"
+                  onClick={remove}
+                  className="btn !px-2.5 !py-1 text-xs text-crayon-red border-crayon-red/50 hover:bg-crayon-red hover:text-white"
+                  disabled={busy}
+                  title="Elimina definitivamente dal registro scolastico"
+                >
+                  🗑 Elimina
+                </button>
+              )}
             </div>
           ) : (
             <span className="font-hand text-xs text-ink-soft">Promemoria automatico attivo ✎</span>

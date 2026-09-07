@@ -16,6 +16,7 @@ import {
 } from "@/lib/agenda";
 import { BookingModal, type SlotTarget } from "../BookingModal";
 import { useToast } from "../Toasts";
+import { useAuth } from "../auth/AuthContext";
 import type { FlipRequest, HoverInfo } from "./Agenda3D";
 import { MobileRollerPicker } from "./MobileRollerPicker";
 
@@ -29,6 +30,8 @@ const Agenda3D = dynamic(() => import("./Agenda3D"), {
 });
 
 export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }) {
+  const { user } = useAuth();
+  const isManager = user?.role === "manager";
   const toast = useToast();
   const [bookings, setBookings] = useState<BookingDTO[]>(initialBookings);
   const [version, setVersion] = useState(0);
@@ -258,26 +261,43 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
               {weekBookings
                 .slice()
                 .sort((a, b) => (a.day + a.hour).localeCompare(b.day + b.hour) || a.hour - b.hour)
-                .map((b) => (
-                  <li key={b.id}>
-                    <button
-                      onClick={() => setTarget({ day: b.day, hour: b.hour, booking: b })}
-                      className="sketch-sm flex w-full items-center gap-3 bg-white px-3 py-2 text-left transition-transform hover:-rotate-1"
-                    >
-                      <span
-                        className="h-8 w-2 shrink-0 rounded-full border-2 border-ink"
-                        style={{ background: b.status === "done" ? "#8a8580" : serviceColor(b.service) }}
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="font-hand block truncate text-xl leading-none">{b.clientName}</span>
-                        <span className="block text-xs uppercase tracking-wider text-ink-soft">
-                          {formatDayLong(b.day)} · {formatHour(b.hour)} · {b.service}
+                .map((b) => {
+                  const isOwner = Boolean(
+                    user && (
+                      (b.userId && b.userId === user.id) ||
+                      (b.clientEmail && user.email && b.clientEmail.toLowerCase() === user.email.toLowerCase())
+                    )
+                  );
+                  const displayClient = isManager || isOwner ? b.clientName : "Slot Riservato";
+
+                  return (
+                    <li key={b.id}>
+                      <button
+                        onClick={() => setTarget({ day: b.day, hour: b.hour, booking: b })}
+                        className="sketch-sm flex w-full items-center gap-3 bg-white px-3 py-2 text-left transition-transform hover:-rotate-1"
+                      >
+                        <span
+                          className="h-8 w-2 shrink-0 rounded-full border-2 border-ink"
+                          style={{ background: b.status === "done" ? "#8a8580" : serviceColor(b.service) }}
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="font-hand block truncate text-xl leading-none flex items-center gap-2">
+                            <span>{displayClient}</span>
+                            {isOwner && (
+                              <span className="tag bg-crayon-teal text-white text-[9px] !py-0 !px-1 font-bold">
+                                Il tuo corso
+                              </span>
+                            )}
+                          </span>
+                          <span className="block text-xs uppercase tracking-wider text-ink-soft">
+                            {formatDayLong(b.day)} · {formatHour(b.hour)} · {b.service}
+                          </span>
                         </span>
-                      </span>
-                      {b.status === "done" && <span className="tag bg-crayon-green text-white">fatto</span>}
-                    </button>
-                  </li>
-                ))}
+                        {isManager && b.status === "done" && <span className="tag bg-crayon-green text-white">fatto</span>}
+                      </button>
+                    </li>
+                  );
+                })}
             </ul>
           )}
         </div>

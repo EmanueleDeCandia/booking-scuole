@@ -210,6 +210,13 @@ export async function updateBooking(
   return toBookingDTO(row);
 }
 
+export async function getBookingById(id: number): Promise<BookingDTO | null> {
+  await ensureDbSchema();
+  const [row] = await db.select().from(bookings).where(eq(bookings.id, id)).limit(1);
+  if (!row) return null;
+  return toBookingDTO(row);
+}
+
 export async function deleteBooking(id: number) {
   await ensureDbSchema();
   await db.delete(bookings).where(eq(bookings.id, id));

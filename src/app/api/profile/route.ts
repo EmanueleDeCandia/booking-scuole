@@ -6,8 +6,15 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const queryUserId = searchParams.get("userId");
     const cookieUserId = req.cookies.get("auth_user_id")?.value;
+    const cookieRole = req.cookies.get("auth_role")?.value;
 
-    const targetId = queryUserId || cookieUserId;
+    let targetId = cookieUserId;
+    if (cookieRole === "manager" && queryUserId) {
+      targetId = queryUserId;
+    } else if (!targetId) {
+      targetId = queryUserId;
+    }
+
     if (!targetId) {
       return NextResponse.json({ error: "Non autorizzato o nessun utente specificato" }, { status: 401 });
     }

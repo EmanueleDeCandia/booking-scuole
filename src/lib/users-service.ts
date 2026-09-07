@@ -1,6 +1,6 @@
 import { db, ensureDbSchema } from "@/db";
 import { users, bookings, type User, type NewUser } from "@/db/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, or, desc, sql } from "drizzle-orm";
 import type { UserDTO } from "./agenda";
 
 export function toUserDTO(u: User): UserDTO {
@@ -143,32 +143,28 @@ export async function updateUser(
 export async function getUserProfileData(userId: string) {
   await ensureDbSchema();
   await ensureUsersSeed();
-  let user = await getUserById(userId);
+  const user = await getUserById(userId);
   if (!user) {
-    // Se non trovato, recupera il primo utente o crea fallback per non bloccare la visualizzazione
-    const allUsers = await db.select().from(users).limit(1);
-    if (allUsers.length) {
-      user = toUserDTO(allUsers[0]);
-    } else {
-      return null;
-    }
+    return null;
   }
 
-  // Prenotazioni collegate a questo utente oppure tutte se gestore o demo
+  // Se gestore didattico, visualizza la panoramica generale della scuola
+  // Se allievo, visualizza RIGOROSAMENTE SOLO i corsi e le lezioni a cui è iscritto
   const userBookings = await db
     .select()
     .from(bookings)
-    .where(user.role === "manager" ? undefined : eq(bookings.userId, user.id))
+    .where(
+      user.role === "manager"
+        ? undefined
+        : or(eq(bookings.userId, user.id), eq(bookings.clientEmail, user.email))
+    )
     .orderBy(desc(bookings.day), desc(bookings.hour));
 
-  // Se l'utente non ha ancora prenotazioni specifiche collegate, associagli quelle dimostrative per popolare il profilo
-  const activeList = userBookings.length > 0 ? userBookings : await db.select().from(bookings).limit(6);
-
-  const total = activeList.length;
-  const present = activeList.filter((b) => b.attendanceStatus === "present" || b.status === "done").length;
-  const absent = activeList.filter((b) => b.attendanceStatus === "absent").length;
-  const upcoming = activeList.filter((b) => b.status === "confirmed").length;
-  const cancelled = activeList.filter((b) => b.status === "cancelled").length;
+  const total = userBookings.length;
+  const present = userBookings.filter((b) => b.attendanceStatus === "present" || b.status === "done").length;
+  const absent = userBookings.filter((b) => b.attendanceStatus === "absent").length;
+  const upcoming = userBookings.filter((b) => b.status === "confirmed").length;
+  const cancelled = userBookings.filter((b) => b.status === "cancelled").length;
 
   return {
     user,
@@ -179,7 +175,7 @@ export async function getUserProfileData(userId: string) {
       upcoming,
       cancelled,
     },
-    bookings: activeList.map((b) => ({
+    bookings: userBookings.map((b) => ({
       id: b.id,
       userId: b.userId ?? null,
       day: b.day,
