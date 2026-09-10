@@ -91,13 +91,14 @@ export function BookingModal({
     clientEmail: email.trim() || null,
   });
 
+  const isPending = !existing || existing.status === "pending";
   const whatsAppUrl = makeWhatsAppUrl({
     phone,
     clientName: name.trim() || (isManager ? "Allievo" : "Cliente"),
     day: existing ? existing.day : day,
     hour: existing ? existing.hour : hour,
     service,
-    mode: isManager ? "reminder" : "confirm",
+    mode: isPending ? "confirm" : "reminder",
   });
 
   const submit = async (e: React.FormEvent, andOpenCalendar = false) => {
@@ -573,10 +574,22 @@ export function BookingModal({
                 href={whatsAppUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={async () => {
+                  if (existing && existing.status === "pending" && isManager) {
+                    try {
+                      await fetch(`/api/bookings/${existing.id}`, {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ status: "confirmed" }),
+                      });
+                      window.dispatchEvent(new Event("bookings:changed"));
+                    } catch {}
+                  }
+                }}
                 className="tag bg-crayon-green text-white hover:-rotate-1 !py-1.5 !px-3 text-xs font-semibold shadow-xs inline-flex items-center gap-1.5"
-                title="Apre WhatsApp con notifica precompilata"
+                title={isPending ? "Apre WhatsApp con conferma appuntamento e aggiorna lo stato" : "Apre WhatsApp con promemoria appuntamento"}
               >
-                💬 Invia Notifica WhatsApp
+                💬 {isPending ? "Invia Conferma WhatsApp" : "Invia Promemoria WhatsApp"}
               </a>
             ) : (
               <span

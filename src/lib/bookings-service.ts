@@ -20,6 +20,7 @@ import {
   type BookingDTO,
   type NotificationDTO,
 } from "./agenda";
+import { addStudentXp, recordAttendanceGamification } from "./users-service";
 
 export function toBookingDTO(b: any): BookingDTO {
   const status = (b.status as any) || "pending";
@@ -191,6 +192,11 @@ export async function createBooking(input: {
     console.warn("Could not write notification:", err);
   }
 
+  // Gamification: +6 XP per nuova lezione prenotata
+  if (newBooking.userId) {
+    addStudentXp(newBooking.userId, 6).catch(() => {});
+  }
+
   return toBookingDTO(newBooking);
 }
 
@@ -269,13 +275,26 @@ export async function updateBooking(
       });
     } catch {}
   } else if (patch.status && patch.status !== before.status) {
-    const kind = patch.status === "cancelled" ? "cancelled" : patch.status === "done" ? "done" : "updated";
+    const isConfirmed = patch.status === "confirmed";
+    const kind =
+      patch.status === "cancelled"
+        ? "cancelled"
+        : patch.status === "done"
+        ? "done"
+        : isConfirmed
+        ? "confirmed"
+        : "updated";
     const title =
       kind === "cancelled"
         ? "Appuntamento annullato"
         : kind === "done"
         ? "Appuntamento completato"
+        : isConfirmed
+        ? "Appuntamento confermato"
         : "Appuntamento aggiornato";
+    const message = isConfirmed
+      ? `${row.clientName} · ${row.service} confermato per ${formatDayLong(row.day)} alle ${formatHour(row.hour)}`
+      : `${row.clientName} · ${formatDayLong(row.day)} alle ${formatHour(row.hour)}`;
     try {
       const notifId = Date.now();
       await setDoc(doc(firestore, "notifications", String(notifId)), {
@@ -286,11 +305,16 @@ export async function updateBooking(
         clientName: row.clientName ?? null,
         kind,
         title,
-        message: `${row.clientName} · ${formatDayLong(row.day)} alle ${formatHour(row.hour)}`,
+        message,
         read: false,
         createdAt: new Date().toISOString(),
       });
     } catch {}
+  }
+
+  // Gamification: +10 XP e streak per convalida presenza o completamento lezione
+  if ((patch.attendanceStatus === "present" || patch.status === "done") && row.userId) {
+    recordAttendanceGamification(row.userId, row.day).catch(() => {});
   }
 
   return toBookingDTO(row);

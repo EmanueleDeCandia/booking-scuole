@@ -10,6 +10,7 @@ const POLL_MS = 40_000;
 const kindIcon: Record<string, string> = {
   reminder: "⏰",
   created: "✎",
+  confirmed: "✓",
   cancelled: "✕",
   done: "✓",
   updated: "↻",

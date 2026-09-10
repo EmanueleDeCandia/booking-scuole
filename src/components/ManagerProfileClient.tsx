@@ -903,6 +903,7 @@ export function ManagerProfileClient() {
             </form>
           </div>
         )}
+
       </div>
     </div>
   );

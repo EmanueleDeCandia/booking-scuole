@@ -34,6 +34,58 @@ export type BookingDTO = {
   createdAt: string;
 };
 
+export type StudentBadge = {
+  id: string;
+  title: string;
+  desc: string;
+  earnedAt: string;
+  symbol?: "palette" | "star" | "feather" | "mask" | "medal" | "scroll" | "ribbon";
+};
+
+export type GamificationProfile = {
+  danceXp: number; // punti esperienza artistica
+  levelRank: number; // 1..5
+  levelTitle: string; // titolo accademico
+  currentStreak: number; // settimane consecutive di frequenza
+  longestStreak: number;
+  eventPunches: number; // 0..10 timbri Eventi Extra (gare, concorsi, scambi, trasferte)
+  eventLogs?: Array<{ name: string; date: string }>;
+  badges: StudentBadge[];
+  lastAttendedWeek?: string; // tracciamento settimana per streak reale
+};
+
+export const DANCE_LEVELS = [
+  { rank: 1, title: "Apprendista d'Atelier", minXp: 0, maxXp: 29 },
+  { rank: 2, title: "Corpo di Ballo Didattico", minXp: 30, maxXp: 69 },
+  { rank: 3, title: "Solista in Perfezionamento", minXp: 70, maxXp: 119 },
+  { rank: 4, title: "Primo Ballerino di Sala", minXp: 120, maxXp: 179 },
+  { rank: 5, title: "Étoile dell'Accademia", minXp: 180, maxXp: Infinity },
+] as const;
+
+export function calculateGamificationLevel(xp: number) {
+  const safeXp = Math.max(0, xp || 0);
+  let current: (typeof DANCE_LEVELS)[number] = DANCE_LEVELS[0];
+  for (const lvl of DANCE_LEVELS) {
+    if (safeXp >= lvl.minXp) {
+      current = lvl;
+    }
+  }
+  const next = DANCE_LEVELS.find((l) => l.rank === current.rank + 1) || null;
+  const prevBase = current.minXp;
+  const targetXp = next ? next.minXp : current.minXp + 60;
+  const progressPercent = next
+    ? Math.min(100, Math.max(10, Math.round(((safeXp - prevBase) / (targetXp - prevBase)) * 100)))
+    : 100;
+
+  return {
+    rank: current.rank,
+    title: current.title,
+    currentXp: safeXp,
+    nextLevelXp: targetXp,
+    progressPercent,
+  };
+}
+
 export type UserDTO = {
   id: string;
   email: string;
@@ -45,6 +97,7 @@ export type UserDTO = {
   membershipDate: string;
   notes: string | null;
   createdAt: string;
+  gamification?: GamificationProfile;
 };
 
 export type NotificationDTO = {

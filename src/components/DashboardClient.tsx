@@ -112,9 +112,9 @@ export function DashboardClient({
     });
     if (res.ok) {
       toast.push({
-        title: status === "done" ? "Completato" : status === "cancelled" ? "Annullato" : "Ripristinato",
+        title: status === "done" ? "Completato" : status === "cancelled" ? "Annullato" : status === "confirmed" ? "Appuntamento Confermato" : "Ripristinato",
         message: b.clientName,
-        tone: status === "cancelled" ? "ink" : "yellow",
+        tone: status === "cancelled" ? "ink" : status === "confirmed" ? "teal" : "yellow",
       });
       reload();
     }
