@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useCallback, useEffect, useRef, useState } from "react";
 import type { NotificationDTO } from "@/lib/agenda";
 import { useToast } from "./Toasts";
+import { useAuth } from "@/components/auth/AuthContext";
 
 const POLL_MS = 40_000;
 
@@ -27,6 +28,7 @@ interface NotificationContextType {
 const NotificationContext = createContext<NotificationContextType | null>(null);
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
+  const { user, role } = useAuth();
   const [items, setItems] = useState<NotificationDTO[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
@@ -34,15 +36,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const seenRef = useRef<Set<number> | null>(null);
   const toast = useToast();
 
+  // Reset visto al cambio utente per evitare notifiche spurie tra account differenti
+  useEffect(() => {
+    seenRef.current = null;
+  }, [user?.id, role]);
+
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/notifications", { cache: "no-store" });
+      const params = new URLSearchParams();
+      if (user?.id) params.set("userId", user.id);
+      if (role) params.set("role", role);
+      if (user?.email) params.set("email", user.email);
+
+      const queryStr = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`/api/notifications${queryStr}`, { cache: "no-store" });
       if (!res.ok) return;
       const data = (await res.json()) as { items: NotificationDTO[]; unread: number };
       setItems(data.items);
       setUnread(data.unread);
 
-      // Notifica nuovi promemoria (toast + Notification API)
+      // Notifica nuovi promemoria specifici dell'utente loggato (toast + Notification API)
       if (seenRef.current === null) {
         seenRef.current = new Set(data.items.map((i) => i.id));
       } else {
@@ -65,7 +78,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } catch {
       /* offline */
     }
-  }, [toast]);
+  }, [user?.id, user?.email, role, toast]);
 
   useEffect(() => {
     if (typeof Notification === "undefined") setPerm("unsupported");
@@ -81,7 +94,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, [load]);
 
   const markAll = async () => {
-    await fetch("/api/notifications", { method: "PATCH", body: JSON.stringify({}) });
+    const ids = items.map((i) => i.id);
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
     setUnread(0);
     setItems((prev) => prev.map((i) => ({ ...i, read: true })));
   };
@@ -90,7 +108,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (typeof Notification === "undefined") return;
     const p = await Notification.requestPermission();
     setPerm(p);
-    if (p === "granted") toast.push({ title: "Promemoria attivi", message: "Riceverai le notifiche del browser.", tone: "teal" });
+    if (p === "granted") {
+      toast.push({
+        title: "Promemoria attivi",
+        message: role === "manager" ? "Riceverai le notifiche della scuola nel browser." : "Riceverai i promemoria delle tue lezioni nel browser.",
+        tone: "teal",
+      });
+    }
   };
 
   return (
@@ -124,6 +148,7 @@ export function useNotifications() {
  */
 export function NotificationBell() {
   const { unread, open, setOpen } = useNotifications();
+  const { role } = useAuth();
 
   return (
     <button
@@ -132,8 +157,8 @@ export function NotificationBell() {
       className={`btn relative !px-2.5 !py-1.5 sm:!px-3 sm:!py-2 transition-all ${
         open ? "btn-ink border-2 border-ink" : ""
       }`}
-      aria-label="Notifiche e promemoria"
-      title="Mostra notifiche e promemoria"
+      aria-label={role === "manager" ? "Notifiche scuola" : "I tuoi promemoria"}
+      title={role === "manager" ? "Mostra notifiche della scuola" : "Mostra i tuoi promemoria"}
     >
       <span className="text-base sm:text-lg leading-none">🔔</span>
       {unread > 0 && (
@@ -151,6 +176,8 @@ export function NotificationBell() {
  */
 export function NotificationPanel() {
   const { items, unread, open, setOpen, perm, askPermission, markAll } = useNotifications();
+  const { role } = useAuth();
+  const isManager = role === "manager";
 
   if (!open) return null;
 
@@ -165,13 +192,18 @@ export function NotificationPanel() {
             </span>
             <div>
               <div className="font-display text-base sm:text-xl font-bold uppercase tracking-wide">
-                Notifiche &amp; Promemoria
+                {isManager ? "Notifiche Scuola (Console Gestore)" : "I Tuoi Promemoria & Notifiche"}
               </div>
               <div className="font-hand text-sm sm:text-base text-ink-soft">
-                {unread > 0 ? (
-                  <span className="text-crayon-red font-bold">{unread} non lette</span>
+                {isManager ? (
+                  "Avvisi e promemoria delle prenotazioni degli allievi"
                 ) : (
-                  "Tutti i promemoria sono stati letti"
+                  "visualizza gli aggiornamenti ai tuoi corsi e prenotazioni!."
+                )}
+                {unread > 0 && (
+                  <span className="ml-2 inline-block font-bold text-crayon-red">
+                    ({unread} non {unread === 1 ? "letta" : "lette"})
+                  </span>
                 )}
               </div>
             </div>
@@ -183,8 +215,9 @@ export function NotificationPanel() {
                 type="button"
                 onClick={askPermission}
                 className="tag !text-xs !py-1 !px-2.5 bg-crayon-yellow hover:scale-105 font-bold shadow-xs cursor-pointer"
+                title="Consenti al browser di inviarti promemoria"
               >
-                Attiva Push Browser
+                {isManager ? "Attiva Notifiche Browser" : "Attiva Promemoria Lezioni"}
               </button>
             )}
             {items.length > 0 && unread > 0 && (
@@ -211,7 +244,9 @@ export function NotificationPanel() {
         <div className="mt-4 max-h-[420px] overflow-y-auto pr-1 scroll-thin">
           {items.length === 0 ? (
             <div className="font-hand p-8 text-center text-xl sm:text-2xl text-ink-soft">
-              Nessuna notifica… ancora ✎
+              {isManager
+                ? "Nessuna notifica per la scuola… ancora ✎"
+                : "Nessun promemoria per i tuoi corsi. Ti avviseremo prima delle tue lezioni!"}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">

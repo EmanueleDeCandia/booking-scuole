@@ -62,6 +62,9 @@ export function toNotificationDTO(n: any): NotificationDTO {
   return {
     id: typeof n.id === "number" ? n.id : parseInt(n.id, 10) || Date.now(),
     bookingId: n.bookingId ? Number(n.bookingId) : null,
+    userId: n.userId ?? null,
+    clientEmail: n.clientEmail ?? null,
+    clientName: n.clientName ?? null,
     kind: (n.kind as any) || "system",
     title: n.title || "",
     message: n.message || "",
@@ -174,6 +177,9 @@ export async function createBooking(input: {
     await setDoc(doc(firestore, "notifications", String(notifId)), {
       id: notifId,
       bookingId: newId,
+      userId: newBooking.userId ?? null,
+      clientEmail: newBooking.clientEmail ?? null,
+      clientName: newBooking.clientName,
       kind: "created",
       title: "Nuova prenotazione",
       message: `${newBooking.clientName} · ${newBooking.service} · ${formatDayLong(newBooking.day)} alle ${formatHour(newBooking.hour)}.`,
@@ -251,6 +257,9 @@ export async function updateBooking(
       await setDoc(doc(firestore, "notifications", String(notifId)), {
         id: notifId,
         bookingId: id,
+        userId: row.userId ?? null,
+        clientEmail: row.clientEmail ?? null,
+        clientName: row.clientName ?? null,
         kind: "updated",
         title: "Appuntamento spostato",
         message: `${row.clientName} · ${row.service} spostato al ${formatDayLong(row.day)} alle ${formatHour(row.hour)}`,
@@ -272,6 +281,9 @@ export async function updateBooking(
       await setDoc(doc(firestore, "notifications", String(notifId)), {
         id: notifId,
         bookingId: id,
+        userId: row.userId ?? null,
+        clientEmail: row.clientEmail ?? null,
+        clientName: row.clientName ?? null,
         kind,
         title,
         message: `${row.clientName} · ${formatDayLong(row.day)} alle ${formatHour(row.hour)}`,
@@ -313,6 +325,9 @@ export async function runReminderSweep(now = new Date()): Promise<NotificationDT
         const notif = {
           id: notifId,
           bookingId: Number(b.id || docSnap.id),
+          userId: b.userId ?? null,
+          clientEmail: b.clientEmail ?? null,
+          clientName: b.clientName ?? null,
           kind: "reminder",
           title: "Promemoria appuntamento",
           message: `Tra ${minutesLeft} min: ${b.clientName} · ${b.service} · ${formatDayLong(b.day)} alle ${formatHour(b.hour)}`,
@@ -332,31 +347,117 @@ export async function runReminderSweep(now = new Date()): Promise<NotificationDT
   return created;
 }
 
-export async function listNotifications(limitCount = 30): Promise<{ items: NotificationDTO[]; unread: number }> {
+export type NotificationFilter = {
+  userId?: string | null;
+  email?: string | null;
+  role?: string | null;
+};
+
+export async function listNotifications(
+  limitCount = 30,
+  filter?: NotificationFilter
+): Promise<{ items: NotificationDTO[]; unread: number }> {
   const snap = await getDocs(collection(firestore, "notifications"));
   let list: NotificationDTO[] = [];
-  let unread = 0;
+
+  const isManager = filter?.role === "manager";
+  const targetUserId = filter?.userId?.trim();
+  const targetEmail = filter?.email?.toLowerCase().trim();
+
+  // Cache prenotazioni per retrocompatibilità con notifiche sprovviste di userId/clientEmail
+  let bookingMap: Map<number, { userId: string | null; clientEmail: string | null }> | null = null;
+  if (!isManager && (targetUserId || targetEmail)) {
+    try {
+      const bookingsSnap = await getDocs(collection(firestore, "bookings"));
+      bookingMap = new Map();
+      bookingsSnap.forEach((bDoc) => {
+        const bData = bDoc.data();
+        const bId = Number(bData.id || bDoc.id);
+        bookingMap!.set(bId, {
+          userId: bData.userId ?? null,
+          clientEmail: bData.clientEmail ?? null,
+        });
+      });
+    } catch {
+      /* ignore */
+    }
+  }
 
   snap.forEach((docSnap) => {
     const data = docSnap.data();
     const dto = toNotificationDTO({ id: docSnap.id, ...data });
-    if (!dto.read) unread += 1;
-    list.push(dto);
+
+    if (isManager) {
+      // Il gestore può visualizzare tutte le notifiche della scuola
+      list.push(dto);
+    } else if (targetUserId || targetEmail) {
+      // Gli studenti vedono solo le notifiche che li riguardano direttamente
+      let belongsToUser = false;
+      if (targetUserId && dto.userId && dto.userId === targetUserId) {
+        belongsToUser = true;
+      }
+      if (!belongsToUser && targetEmail && dto.clientEmail && dto.clientEmail.toLowerCase() === targetEmail) {
+        belongsToUser = true;
+      }
+
+      // Fallback su booking correlato per vecchie notifiche
+      if (!belongsToUser && dto.bookingId && bookingMap) {
+        const bMeta = bookingMap.get(dto.bookingId);
+        if (bMeta) {
+          if (targetUserId && bMeta.userId && bMeta.userId === targetUserId) {
+            belongsToUser = true;
+          }
+          if (!belongsToUser && targetEmail && bMeta.clientEmail && bMeta.clientEmail.toLowerCase() === targetEmail) {
+            belongsToUser = true;
+          }
+        }
+      }
+
+      if (belongsToUser) {
+        list.push(dto);
+      }
+    } else {
+      // Utente anonimo o non loggato: non esporre notifiche altrui
+    }
   });
 
   list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  const unread = list.filter((n) => !n.read).length;
   return { items: list.slice(0, limitCount), unread };
 }
 
-export async function markNotificationsRead(ids?: number[]): Promise<void> {
+export async function markNotificationsRead(
+  ids?: number[],
+  filter?: NotificationFilter
+): Promise<void> {
+  const isManager = filter?.role === "manager";
+  const targetUserId = filter?.userId?.trim();
+  const targetEmail = filter?.email?.toLowerCase().trim();
+
   const snap = await getDocs(collection(firestore, "notifications"));
   for (const docSnap of snap.docs) {
     const data = docSnap.data();
     const id = Number(data.id || docSnap.id);
-    if (!ids || ids.length === 0 || ids.includes(id)) {
-      if (!data.read) {
-        await updateDoc(docSnap.ref, { read: true });
+    if (ids && ids.length > 0 && !ids.includes(id)) {
+      continue;
+    }
+
+    // Se non è il gestore, segna solo le notifiche appartenenti allo studente
+    if (!isManager && (targetUserId || targetEmail)) {
+      let belongsToUser = false;
+      if (targetUserId && data.userId && data.userId === targetUserId) {
+        belongsToUser = true;
       }
+      if (!belongsToUser && targetEmail && data.clientEmail && String(data.clientEmail).toLowerCase() === targetEmail) {
+        belongsToUser = true;
+      }
+      if (!belongsToUser) {
+        continue;
+      }
+    }
+
+    if (!data.read) {
+      await updateDoc(docSnap.ref, { read: true });
     }
   }
 }

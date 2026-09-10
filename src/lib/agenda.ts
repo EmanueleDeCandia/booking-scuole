@@ -50,6 +50,9 @@ export type UserDTO = {
 export type NotificationDTO = {
   id: number;
   bookingId: number | null;
+  userId?: string | null;
+  clientEmail?: string | null;
+  clientName?: string | null;
   kind: string;
   title: string;
   message: string;
