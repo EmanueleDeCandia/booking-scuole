@@ -16,6 +16,12 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Modale protezione Password Gestore / Direzione
+  const [showManagerModal, setShowManagerModal] = useState(false);
+  const [managerPasswordInput, setManagerPasswordInput] = useState("");
+  const [managerModalError, setManagerModalError] = useState<string | null>(null);
+  const [managerLoading, setManagerLoading] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) {
@@ -41,16 +47,37 @@ export default function LoginPage() {
     }
   };
 
-  const handleDemoLogin = async (targetRole: "user" | "manager") => {
+  const handleDemoStudentLogin = async () => {
     setLoading(true);
     try {
-      await loginAsDemo(targetRole);
-      toast.show(`Accesso effettuato come ${targetRole === "manager" ? "Gestore" : "Allievo"}!`, "info");
+      await loginAsDemo("user");
+      toast.show("Accesso effettuato come Allievo Iscritto!", "info");
       router.push("/profilo");
     } catch (err: any) {
-      setError(err.message || "Errore accesso demo.");
+      setError(err.message || "Errore accesso allievo demo.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleManagerPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!managerPasswordInput.trim()) {
+      setManagerModalError("Inserisci la password di direzione.");
+      return;
+    }
+    setManagerModalError(null);
+    setManagerLoading(true);
+    try {
+      await loginAsDemo("manager", managerPasswordInput.trim());
+      toast.show("Accesso autorizzato come Gestore Didattico! 👑", "info");
+      setShowManagerModal(false);
+      setManagerPasswordInput("");
+      router.push("/dashboard");
+    } catch (err: any) {
+      setManagerModalError(err.message || "Password di direzione non valida. Accesso negato.");
+    } finally {
+      setManagerLoading(false);
     }
   };
 
@@ -120,31 +147,122 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Demo Fast Buttons per testare immediatamente ruoli */}
-        <div className="mt-6 rounded-lg bg-paper-aged/50 p-3 text-center">
-          <p className="font-hand text-sm font-bold text-ink-soft">
-            ⚡ Accesso Rapido di Prova:
+        {/* Accesso Rapido: Allievo Diretto e Gestore Protetto da Password */}
+        <div className="mt-6 rounded-lg bg-paper-aged/50 p-3.5 text-center border border-ink/20">
+          <p className="font-hand text-sm font-bold text-ink-soft flex items-center justify-center gap-1.5">
+            <span>⚡</span> Accesso Rapido:
           </p>
-          <div className="mt-2 flex gap-2">
+          <div className="mt-2.5 flex flex-col sm:flex-row gap-2">
             <button
               type="button"
-              onClick={() => handleDemoLogin("user")}
-              disabled={loading}
-              className="sketch-sm flex-1 bg-crayon-yellow/20 px-2 py-1.5 text-xs font-semibold text-ink transition hover:bg-crayon-yellow/40"
+              onClick={handleDemoStudentLogin}
+              disabled={loading || managerLoading}
+              className="sketch-sm flex-1 bg-crayon-yellow/20 px-3 py-2 text-xs font-bold text-ink transition hover:bg-crayon-yellow/40 flex items-center justify-center gap-1.5 shadow-xs"
+              title="Entra subito come allievo per provare l'agenda, corsi e gamification"
             >
-              👤 Profilo Allievo
+              <span>👤</span> Entra come Allievo Demo
             </button>
             <button
               type="button"
-              onClick={() => handleDemoLogin("manager")}
-              disabled={loading}
-              className="sketch-sm flex-1 bg-crayon-red/20 px-2 py-1.5 text-xs font-semibold text-crayon-red transition hover:bg-crayon-red/30"
+              onClick={() => {
+                setManagerModalError(null);
+                setManagerPasswordInput("");
+                setShowManagerModal(true);
+              }}
+              disabled={loading || managerLoading}
+              className="sketch-sm flex-1 bg-crayon-red/15 px-3 py-2 text-xs font-bold text-crayon-red transition hover:bg-crayon-red/25 flex items-center justify-center gap-1.5 shadow-xs"
+              title="Accesso riservato alla Direzione didattica della scuola"
             >
-              👑 Dashboard Gestore
+              <span>👑</span> Entra come Gestore (PIN)
             </button>
           </div>
+          <p className="font-hand text-[11px] text-ink-soft/80 mt-1.5">
+            🔒 L&apos;accesso alla console del Gestore è protetto da Password di Direzione.
+          </p>
         </div>
       </div>
+
+      {/* MODALE DI PROTEZIONE PASSWORD GESTORE */}
+      {showManagerModal && (
+        <div
+          className="fixed inset-0 z-[100] grid place-items-center bg-ink/50 p-3 sm:p-4 backdrop-blur-[2px]"
+          onClick={() => setShowManagerModal(false)}
+        >
+          <form
+            onSubmit={handleManagerPasswordSubmit}
+            onClick={(e) => e.stopPropagation()}
+            className="sketch wobble-in relative w-full max-w-sm bg-[#fffdfa] p-5 sm:p-6"
+            style={{ transform: "rotate(-0.5deg)" }}
+          >
+            <div
+              className="absolute -top-3 left-1/2 h-6 w-28 -translate-x-1/2 rotate-[-2deg] bg-crayon-red/80"
+              style={{ clipPath: "polygon(2% 0, 100% 4%, 98% 100%, 0 96%)" }}
+            />
+
+            <div className="flex items-start justify-between border-b-2 border-dashed border-ink/20 pb-3">
+              <div>
+                <h3 className="font-display text-base uppercase font-bold text-ink flex items-center gap-1.5">
+                  <span>👑</span> Accesso Direzione Scuola
+                </h3>
+                <p className="font-hand text-xs text-ink-soft mt-0.5">
+                  Pannello riservato alla Direzione Didattica
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowManagerModal(false)}
+                className="font-bold text-ink hover:text-crayon-red text-sm"
+              >
+                ✕
+              </button>
+            </div>
+
+            {managerModalError && (
+              <div className="sketch-sm mt-3 border border-crayon-red/30 bg-crayon-red/10 p-2.5 text-xs text-crayon-red font-semibold">
+                ✗ {managerModalError}
+              </div>
+            )}
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="font-display block text-[11px] tracking-wider text-ink-soft uppercase font-bold mb-1">
+                  Password o PIN di Direzione *
+                </label>
+                <input
+                  type="password"
+                  required
+                  autoFocus
+                  value={managerPasswordInput}
+                  onChange={(e) => setManagerPasswordInput(e.target.value)}
+                  placeholder="Inserisci la password..."
+                  className="w-full rounded border-2 border-ink bg-paper px-3 py-2 text-sm outline-none focus:border-crayon-blue"
+                />
+              </div>
+
+              <div className="rounded bg-crayon-yellow/20 p-2.5 border border-ink/20 font-hand text-xs text-ink-soft">
+                💡 <strong>Sicurezza Scuola:</strong> Solo gli insegnanti e i gestori autorizzati in possesso della chiave possono accedere alla console di gestione corsi e presenze.
+              </div>
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2 border-t-2 border-dashed border-ink/20 pt-3">
+              <button
+                type="button"
+                onClick={() => setShowManagerModal(false)}
+                className="btn !py-1.5 !px-3 text-xs"
+              >
+                Annulla
+              </button>
+              <button
+                type="submit"
+                disabled={managerLoading}
+                className="btn btn-red !py-1.5 !px-4 text-xs font-bold shadow-sm"
+              >
+                {managerLoading ? "Verifica…" : "✓ Entra come Gestore"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

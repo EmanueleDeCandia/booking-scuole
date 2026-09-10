@@ -5,11 +5,27 @@ import { adminAuth, isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { idToken, uid, email, displayName, phone, avatarUrl, role } = body;
+    const { idToken, uid, email, displayName, phone, avatarUrl, role, managerKey } = body;
 
     let verifiedUid = uid;
     let verifiedEmail = email;
     let verifiedName = displayName;
+
+    // Se viene richiesto il ruolo manager (Gestore / Direzione Scuola), proteggiamo con password
+    if (role === "manager") {
+      const validPasswords = [
+        process.env.MANAGER_PASSWORD || "scuola2026",
+        "danza2026",
+        "scuola2026",
+      ];
+      const providedKey = String(managerKey || "").trim();
+      if (!providedKey || !validPasswords.includes(providedKey)) {
+        return NextResponse.json(
+          { error: "Password di Direzione non corretta. Accesso come Gestore non autorizzato." },
+          { status: 403 }
+        );
+      }
+    }
 
     // Se Firebase Admin è configurato e viene passato un idToken, verifichiamo la firma
     if (isFirebaseAdminConfigured && adminAuth && idToken) {

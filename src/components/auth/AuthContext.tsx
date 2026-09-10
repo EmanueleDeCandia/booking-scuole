@@ -25,7 +25,7 @@ type AuthContextType = {
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
-  loginAsDemo: (role: "user" | "manager") => Promise<void>;
+  loginAsDemo: (role: "user" | "manager", managerPassword?: string) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const syncUserWithBackend = async (
     fbU: FirebaseUser | { uid: string; email: string; displayName?: string },
-    extra?: { phone?: string; role?: "user" | "manager"; avatarUrl?: string }
+    extra?: { phone?: string; role?: "user" | "manager"; avatarUrl?: string; managerKey?: string }
   ) => {
     try {
       let idToken: string | undefined;
@@ -56,18 +56,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           phone: extra?.phone,
           avatarUrl: extra?.avatarUrl,
           role: extra?.role,
+          managerKey: extra?.managerKey,
         }),
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        setUser(data.user);
-        return data.user;
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Errore sincronizzazione backend");
       }
-    } catch (e) {
+
+      setUser(data.user);
+      return data.user;
+    } catch (e: any) {
       console.error("Errore sincronizzazione backend:", e);
+      throw e;
     }
-    return null;
   };
 
   const refreshProfile = async () => {
@@ -199,7 +202,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginAsDemo = async (targetRole: "user" | "manager") => {
+  const loginAsDemo = async (targetRole: "user" | "manager", managerPassword?: string) => {
     setLoading(true);
     try {
       const mockEmail = targetRole === "manager" ? "gestore@scuola.it" : "allievo.danza@esempio.it";
@@ -209,7 +212,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       await syncUserWithBackend(
         { uid: mockUid, email: mockEmail, displayName: mockName },
-        { role: targetRole, phone: mockPhone }
+        { role: targetRole, phone: mockPhone, managerKey: managerPassword }
       );
     } finally {
       setLoading(false);
