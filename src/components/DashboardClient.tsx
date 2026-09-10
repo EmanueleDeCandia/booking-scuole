@@ -139,9 +139,14 @@ export function DashboardClient({
           </h1>
           <p className="font-hand mt-1.5 sm:mt-2 text-xl sm:text-3xl text-ink-soft">Gestisci gli appuntamenti scritti sull&apos;agenda.</p>
         </div>
-        <Link href="/" className="btn btn-red !py-2 !px-3.5 sm:!py-2.5 sm:!px-5 text-xs sm:text-base font-bold shadow-sketch">
-          ✎ Apri l&apos;agenda 3D
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/profilo#gamification-manager" className="btn btn-yellow !py-2 !px-3.5 sm:!py-2.5 sm:!px-4 text-xs sm:text-sm font-bold shadow-sketch">
+            🏅 Registro Gamification &amp; Timbri
+          </Link>
+          <Link href="/" className="btn btn-red !py-2 !px-3.5 sm:!py-2.5 sm:!px-5 text-xs sm:text-base font-bold shadow-sketch">
+            ✎ Apri l&apos;agenda 3D
+          </Link>
+        </div>
       </div>
 
       {user && role !== "manager" && (

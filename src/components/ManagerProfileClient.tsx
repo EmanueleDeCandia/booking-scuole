@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useAuth } from "./auth/AuthContext";
 import { useToast } from "./Toasts";
 import type { CourseDTO } from "@/lib/courses-service";
+import type { UserDTO } from "@/lib/agenda";
+import { StudentGamificationCard } from "./StudentGamificationCard";
 
 type MetricsData = {
   totalCourses: number;
@@ -57,12 +59,24 @@ export function ManagerProfileClient() {
   // Stato voto utente per corso
   const [votingCourseId, setVotingCourseId] = useState<number | null>(null);
 
+  // Gamification: Gestione Registro Didattico Allievi, Timbri ed Encomi
+  const [studentsList, setStudentsList] = useState<UserDTO[]>([]);
+  const [selectedStudentForPunch, setSelectedStudentForPunch] = useState<UserDTO | null>(null);
+  const [selectedStudentForHonor, setSelectedStudentForHonor] = useState<UserDTO | null>(null);
+  const [previewStudentGamification, setPreviewStudentGamification] = useState<UserDTO | null>(null);
+  const [eventNameInput, setEventNameInput] = useState("Concorso Coreografico d'Autore");
+  const [honorTitleInput, setHonorTitleInput] = useState("Dedizione e Virtuosismo d'Atelier");
+  const [honorDescInput, setHonorDescInput] = useState("Perfezionamento tecnico ed interpretazione impeccabile.");
+  const [honorSymbolInput, setHonorSymbolInput] = useState<string>("medal");
+  const [submittingGamification, setSubmittingGamification] = useState(false);
+
   const loadAll = useCallback(async () => {
     try {
       setLoading(true);
-      const [resMetrics, resCourses] = await Promise.all([
+      const [resMetrics, resCourses, resGamification] = await Promise.all([
         fetch("/api/courses?mode=metrics", { cache: "no-store" }),
         fetch("/api/courses", { cache: "no-store" }),
+        fetch("/api/gamification", { cache: "no-store" }),
       ]);
 
       if (resMetrics.ok) {
@@ -72,6 +86,10 @@ export function ManagerProfileClient() {
       if (resCourses.ok) {
         const c = await resCourses.json();
         setCourses(c.courses || []);
+      }
+      if (resGamification.ok) {
+        const g = await resGamification.json();
+        setStudentsList(g.students || []);
       }
     } catch (e) {
       console.error("Errore caricamento dati gestore:", e);
@@ -215,6 +233,60 @@ export function ManagerProfileClient() {
       toast.show(err.message || "Errore voto appeal", "error");
     } finally {
       setVotingCourseId(null);
+    }
+  };
+
+  const handleConfirmEventPunch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudentForPunch) return;
+    setSubmittingGamification(true);
+    try {
+      const res = await fetch("/api/gamification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedStudentForPunch.id,
+          action: "add_event_punch",
+          eventName: eventNameInput,
+        }),
+      });
+      if (res.ok) {
+        toast.show(`🎟️ Timbro per "${eventNameInput}" assegnato a ${selectedStudentForPunch.displayName}!`, "info");
+        setSelectedStudentForPunch(null);
+        await loadAll();
+      }
+    } catch (err: any) {
+      toast.show(err.message || "Errore assegnazione timbro", "error");
+    } finally {
+      setSubmittingGamification(false);
+    }
+  };
+
+  const handleConfirmHonor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudentForHonor) return;
+    setSubmittingGamification(true);
+    try {
+      const res = await fetch("/api/gamification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: selectedStudentForHonor.id,
+          action: "award_honor",
+          honorTitle: honorTitleInput,
+          honorDesc: honorDescInput,
+          honorSymbol: honorSymbolInput,
+        }),
+      });
+      if (res.ok) {
+        toast.show(`🎖️ Encomio "${honorTitleInput}" conferito con successo a ${selectedStudentForHonor.displayName}!`, "info");
+        setSelectedStudentForHonor(null);
+        await loadAll();
+      }
+    } catch (err: any) {
+      toast.show(err.message || "Errore conferimento encomio", "error");
+    } finally {
+      setSubmittingGamification(false);
     }
   };
 
@@ -689,6 +761,144 @@ export function ManagerProfileClient() {
           </div>
         </div>
 
+        {/* SEZIONE 3: REGISTRO DIDATTICO & GAMIFICATION ALLIEVI */}
+        <div id="gamification-manager" className="sketch bg-[#fffdfa] p-4 sm:p-6 mb-8 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b-2 border-dashed border-ink/20 pb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="tag bg-crayon-yellow border border-ink text-xs font-bold uppercase shadow-xs">
+                  Console Direzione
+                </span>
+                <span className="font-hand text-sm text-ink-soft">Registro di Merito &amp; Gamification</span>
+              </div>
+              <h2 className="font-display text-xl sm:text-2xl uppercase tracking-tight text-ink mt-1 flex items-center gap-2">
+                <span>🏅</span> Registro Didattico &amp; Gamification Allievi
+              </h2>
+              <p className="font-hand text-sm text-ink-soft mt-0.5">
+                Monitora la crescita artistica degli allievi ({studentsList.length}), convalida la presenza a eventi straordinari (concorsi, gare, trasferte) e conferisci encomi.
+              </p>
+            </div>
+          </div>
+
+          {/* Regolamento Didattico Naïve */}
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-lg bg-crayon-teal/15 p-3 border border-ink/20 text-xs">
+              <span className="font-display font-bold uppercase tracking-wider text-[11px] block text-ink mb-1">
+                ⭐ Avanzamento &amp; Presenze
+              </span>
+              <p className="font-hand text-ink-soft">
+                <strong>+6 XP</strong> per ogni corso prenotato. <strong>+10 XP</strong> alla convalidata presenza in sala. La frequenza costante sblocca i Gradi d&apos;Atelier.
+              </p>
+            </div>
+            <div className="rounded-lg bg-crayon-yellow/20 p-3 border border-ink/20 text-xs">
+              <span className="font-display font-bold uppercase tracking-wider text-[11px] block text-ink mb-1">
+                🏛️ Passaporto Eventi Straordinari
+              </span>
+              <p className="font-hand text-ink-soft">
+                Timbri riservati esclusivamente a: <strong>Concorsi, Gare, Trasferte, Scambi Allievi</strong>. Ciascun timbro accredita <strong>+5 XP</strong>. 10 timbri = Masterclass premio.
+              </p>
+            </div>
+            <div className="rounded-lg bg-crayon-red/10 p-3 border border-ink/20 text-xs">
+              <span className="font-display font-bold uppercase tracking-wider text-[11px] block text-ink mb-1">
+                🎖️ Encomi d&apos;Onore
+              </span>
+              <p className="font-hand text-ink-soft">
+                Distintivo artistico conferito direttamente dalla Direzione per merito, interpretazione e dedizione: accredita <strong>+15 XP</strong> e compare nel libretto.
+              </p>
+            </div>
+          </div>
+
+          {/* Elenco Allievi Iscritti */}
+          <div className="mt-6 space-y-3">
+            {studentsList.length === 0 ? (
+              <div className="p-8 text-center font-hand text-lg text-ink-soft border-2 border-dashed border-ink/20 rounded-lg">
+                Nessun allievo ancora registrato per la gamification.
+              </div>
+            ) : (
+              studentsList.map((st) => {
+                const g = st.gamification;
+                const xp = g?.danceXp || 12;
+                const rank = g?.levelRank || 1;
+                const title = g?.levelTitle || "Apprendista d'Atelier";
+                const streak = g?.currentStreak || 1;
+                const punches = g?.eventPunches || 0;
+                const badgesCount = g?.badges?.length || 0;
+
+                return (
+                  <div
+                    key={st.id}
+                    className="sketch-sm bg-white p-3.5 sm:p-4 border-2 border-ink flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs hover:border-crayon-blue transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="h-12 w-12 rounded-full border-2 border-ink overflow-hidden bg-crayon-yellow/20 flex items-center justify-center shrink-0">
+                        {st.avatarUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={st.avatarUrl} alt={st.displayName} className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="font-display text-base font-bold text-ink">
+                            {st.displayName ? st.displayName.slice(0, 2).toUpperCase() : "AL"}
+                          </span>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h4 className="font-display text-base uppercase font-bold text-ink truncate">
+                            {st.displayName}
+                          </h4>
+                          <span className="tag bg-crayon-yellow border border-ink text-[10px] font-bold">
+                            Grado {rank} · {title}
+                          </span>
+                        </div>
+                        <p className="font-hand text-xs text-ink-soft truncate">{st.email}</p>
+                        <div className="flex flex-wrap items-center gap-3 text-xs font-hand text-ink-soft mt-1">
+                          <span className="text-crayon-red font-bold">⭐ {xp} XP</span>
+                          <span>🩰 Costanza: {streak} {streak === 1 ? "sett." : "sett."}</span>
+                          <span>🏛️ Timbri Eventi: {punches}/10</span>
+                          <span>🎖️ Encomi: {badgesCount}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 self-end md:self-center shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewStudentGamification(st)}
+                        className="btn !py-1.5 !px-3 text-xs font-bold border border-ink bg-paper hover:bg-paper-aged"
+                        title="Visualizza il pass e libretto completo dell'allievo"
+                      >
+                        📖 Libretto
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStudentForPunch(st);
+                          setEventNameInput("Concorso Coreografico d'Autore");
+                        }}
+                        className="btn btn-yellow !py-1.5 !px-3 text-xs font-bold"
+                        title="Assegna timbro per evento straordinario (gara, concorso, trasferta)"
+                      >
+                        🏛️ Assegna Timbro (+5 XP)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedStudentForHonor(st);
+                          setHonorTitleInput("Dedizione e Virtuosismo d'Atelier");
+                          setHonorDescInput("Riconoscimento al merito tecnico ed espressivo.");
+                        }}
+                        className="btn btn-teal !py-1.5 !px-3 text-xs font-bold text-white"
+                        title="Conferisci encomio artistico speciale"
+                      >
+                        🎖️ Encomio (+15 XP)
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
         {/* MODALE CREAZIONE CORSO */}
         {showCreateModal && (
           <div
@@ -901,6 +1111,204 @@ export function ManagerProfileClient() {
                 </button>
               </div>
             </form>
+          </div>
+        )}
+
+        {/* MODALE ASSEGNAZIONE TIMBRO EVENTO STRAORDINARIO */}
+        {selectedStudentForPunch && (
+          <div
+            className="fixed inset-0 z-[100] grid place-items-center bg-ink/40 p-3 sm:p-4 backdrop-blur-[2px]"
+            onClick={() => setSelectedStudentForPunch(null)}
+          >
+            <form
+              onSubmit={handleConfirmEventPunch}
+              onClick={(e) => e.stopPropagation()}
+              className="sketch wobble-in relative w-full max-w-md bg-[#fffdfa] p-5 sm:p-6"
+            >
+              <div className="flex items-start justify-between border-b-2 border-dashed border-ink/20 pb-3">
+                <div>
+                  <h3 className="font-display text-base uppercase font-bold text-ink flex items-center gap-1.5">
+                    <span>🏛️</span> Assegna Timbro Evento Straordinario
+                  </h3>
+                  <p className="font-hand text-sm text-ink-soft">
+                    Allievo: <strong>{selectedStudentForPunch.displayName}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentForPunch(null)}
+                  className="font-bold text-ink hover:text-crayon-red"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3 text-xs">
+                <div>
+                  <label className="font-display text-[11px] uppercase tracking-wide block mb-1 font-bold">
+                    Nome Evento / Tipologia *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={eventNameInput}
+                    onChange={(e) => setEventNameInput(e.target.value)}
+                    placeholder="es. Concorso Coreografico d'Autore, Gara Regionale, Trasferta Teatro, Scambio Allievi"
+                    className="w-full rounded border-2 border-ink bg-paper px-3 py-2 text-xs font-medium outline-none focus:border-crayon-blue"
+                  />
+                </div>
+
+                <div className="rounded bg-crayon-yellow/20 p-2.5 border border-ink/20 font-hand text-xs text-ink-soft">
+                  💡 <strong>Regolamento Scuola:</strong> I timbri del passaporto sono riservati agli
+                  eventi extra didattici (gare, concorsi, trasferte, scambi di allievi).
+                  L&apos;assegnazione accredita automaticamente <strong>+5 XP</strong> all&apos;allievo.
+                </div>
+              </div>
+
+              <div className="mt-5 flex items-center justify-end gap-2 border-t-2 border-dashed border-ink/20 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentForPunch(null)}
+                  className="btn !py-1.5 !px-3 text-xs"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingGamification}
+                  className="btn btn-yellow !py-1.5 !px-4 text-xs font-bold shadow-sm"
+                >
+                  {submittingGamification ? "Assegnazione…" : "✓ Conferma Timbro (+5 XP)"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* MODALE CONFERIMENTO ENCOMIO ARTISTICO */}
+        {selectedStudentForHonor && (
+          <div
+            className="fixed inset-0 z-[100] grid place-items-center bg-ink/40 p-3 sm:p-4 backdrop-blur-[2px]"
+            onClick={() => setSelectedStudentForHonor(null)}
+          >
+            <form
+              onSubmit={handleConfirmHonor}
+              onClick={(e) => e.stopPropagation()}
+              className="sketch wobble-in relative w-full max-w-md bg-[#fffdfa] p-5 sm:p-6"
+            >
+              <div className="flex items-start justify-between border-b-2 border-dashed border-ink/20 pb-3">
+                <div>
+                  <h3 className="font-display text-base uppercase font-bold text-ink flex items-center gap-1.5">
+                    <span>🎖️</span> Conferisci Encomio d&apos;Onore
+                  </h3>
+                  <p className="font-hand text-sm text-ink-soft">
+                    Allievo: <strong>{selectedStudentForHonor.displayName}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentForHonor(null)}
+                  className="font-bold text-ink hover:text-crayon-red"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3 text-xs">
+                <div>
+                  <label className="font-display text-[11px] uppercase tracking-wide block mb-1 font-bold">
+                    Titolo del Riconoscimento *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={honorTitleInput}
+                    onChange={(e) => setHonorTitleInput(e.target.value)}
+                    placeholder="es. Virtuosismo Grand Jeté, Dedizione d'Atelier"
+                    className="w-full rounded border-2 border-ink bg-paper px-3 py-2 text-xs font-medium outline-none focus:border-crayon-blue"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-display text-[11px] uppercase tracking-wide block mb-1 font-bold">
+                    Motivazione Artistica del Maestro / Direzione
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={honorDescInput}
+                    onChange={(e) => setHonorDescInput(e.target.value)}
+                    placeholder="Motivazione del merito e dell'espressione coreutica..."
+                    className="w-full rounded border-2 border-ink bg-paper px-3 py-2 text-xs font-medium outline-none focus:border-crayon-blue"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-display text-[11px] uppercase tracking-wide block mb-1 font-bold">
+                    Simbolo del Distintivo
+                  </label>
+                  <select
+                    value={honorSymbolInput}
+                    onChange={(e) => setHonorSymbolInput(e.target.value)}
+                    className="w-full rounded border-2 border-ink bg-paper px-3 py-2 text-xs font-medium outline-none"
+                  >
+                    <option value="medal">🎖️ Medaglia di Merito</option>
+                    <option value="scroll">📜 Pergamena Accademica</option>
+                    <option value="star">⭐ Stella di Sala</option>
+                    <option value="feather">🪶 Penna d&apos;Atelier</option>
+                    <option value="mask">🎭 Maschera Scenica</option>
+                  </select>
+                </div>
+
+                <div className="rounded bg-crayon-teal/20 p-2.5 border border-ink/20 font-hand text-xs text-ink-soft">
+                  ✨ Il conferimento accredita un bonus speciale di <strong>+15 XP</strong> e compare
+                  immediatamente nel libretto didattico dell&apos;allievo.
+                </div>
+              </div>
+
+              <div className="mt-5 flex items-center justify-end gap-2 border-t-2 border-dashed border-ink/20 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setSelectedStudentForHonor(null)}
+                  className="btn !py-1.5 !px-3 text-xs"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingGamification}
+                  className="btn btn-teal !py-1.5 !px-4 text-xs font-bold text-white shadow-sm"
+                >
+                  {submittingGamification ? "Conferimento…" : "🎖️ Assegna Encomio (+15 XP)"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {/* MODALE ANTEPRIMA LIBRETTO ALLIEVO */}
+        {previewStudentGamification && (
+          <div
+            className="fixed inset-0 z-[100] grid place-items-center bg-ink/50 p-3 sm:p-6 backdrop-blur-[2px] overflow-y-auto"
+            onClick={() => setPreviewStudentGamification(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-3xl my-auto"
+            >
+              <div className="flex justify-end mb-2">
+                <button
+                  type="button"
+                  onClick={() => setPreviewStudentGamification(null)}
+                  className="btn btn-ink text-xs font-bold shadow-sketch"
+                >
+                  ✕ Chiudi Libretto
+                </button>
+              </div>
+              <StudentGamificationCard
+                student={previewStudentGamification}
+                onRefresh={loadAll}
+              />
+            </div>
           </div>
         )}
 

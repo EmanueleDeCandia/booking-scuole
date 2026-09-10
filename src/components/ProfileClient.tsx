@@ -17,6 +17,7 @@ import {
 } from "@/lib/agenda";
 import { BookingModal, type SlotTarget } from "./BookingModal";
 import { ManagerProfileClient } from "./ManagerProfileClient";
+import { StudentGamificationCard } from "./StudentGamificationCard";
 
 export function ProfileClient() {
   const { user, loading } = useAuth();
@@ -412,6 +413,14 @@ function StudentProfileClient() {
             Esplora e Vota i Corsi 🌟
           </Link>
         </div>
+      </div>
+
+      {/* Sezione Libretto Didattico & Gamification Allievo */}
+      <div id="gamification" className="mt-8">
+        <StudentGamificationCard
+          student={profileData?.user || user}
+          onRefresh={refreshProfile}
+        />
       </div>
 
       {/* Gestione Corsi: Tab In programma vs Storico */}

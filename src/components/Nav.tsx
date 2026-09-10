@@ -57,13 +57,30 @@ function NavInner() {
           {user ? (
             <>
               {role === "manager" ? (
+                <>
+                  <Link
+                    href="/dashboard"
+                    className={`btn !py-2 !px-3.5 text-base font-semibold ${is("/dashboard") ? "btn-ink" : ""}`}
+                  >
+                    👑 Dashboard
+                  </Link>
+                  <Link
+                    href="/profilo#gamification-manager"
+                    className="btn btn-yellow !py-2 !px-3 text-sm font-bold shadow-xs"
+                    title="Console Registro Didattico, Timbri Straordinari ed Encomi"
+                  >
+                    🏅 Gamification
+                  </Link>
+                </>
+              ) : (
                 <Link
-                  href="/dashboard"
-                  className={`btn !py-2 !px-3.5 text-base font-semibold ${is("/dashboard") ? "btn-ink" : ""}`}
+                  href="/profilo#gamification"
+                  className="btn btn-yellow !py-2 !px-3 text-sm font-bold shadow-xs"
+                  title="Il tuo Libretto Artistico, XP e Gradi d'Atelier"
                 >
-                  👑 Dashboard
+                  🏅 Libretto Artistico
                 </Link>
-              ) : null}
+              )}
 
               <Link
                 href="/profilo"
@@ -178,12 +195,30 @@ function NavInner() {
                 🎭 Corsi in Programma & Sondaggio
               </Link>
               {user && role === "manager" && (
+                <>
+                  <Link
+                    href="/dashboard"
+                    onClick={() => setMobileOpen(false)}
+                    className={`btn btn-yellow w-full !py-2.5 text-sm font-bold justify-start ${is("/dashboard") ? "btn-ink" : ""}`}
+                  >
+                    👑 Dashboard Gestionale
+                  </Link>
+                  <Link
+                    href="/profilo#gamification-manager"
+                    onClick={() => setMobileOpen(false)}
+                    className="btn btn-teal w-full !py-2.5 text-sm font-bold justify-start text-white"
+                  >
+                    🏅 Registro Gamification &amp; Timbri
+                  </Link>
+                </>
+              )}
+              {user && role !== "manager" && (
                 <Link
-                  href="/dashboard"
+                  href="/profilo#gamification"
                   onClick={() => setMobileOpen(false)}
-                  className={`btn btn-yellow w-full !py-2.5 text-sm font-bold justify-start ${is("/dashboard") ? "btn-ink" : ""}`}
+                  className="btn btn-teal w-full !py-2.5 text-sm font-bold justify-start text-white"
                 >
-                  👑 Dashboard Gestionale
+                  🏅 Libretto Artistico &amp; XP
                 </Link>
               )}
               {user && (
