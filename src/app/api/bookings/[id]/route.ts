@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { deleteBooking, getBookingById, updateBooking } from "@/lib/bookings-service";
+import { getUserById, getUserByEmail } from "@/lib/users-service";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +19,35 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return Response.json({ error: "Prenotazione non trovata" }, { status: 404 });
   }
 
-  // Verifica autorizzazione:
-  // - Il gestore ("manager") può aggiornare presenze, note o dettagli
-  // - L'allievo ("user") può aggiornare SOLO la propria prenotazione
-  const isManager = currentRole === "manager";
-  const isOwner = Boolean(currentUserId && existingBooking.userId === currentUserId);
+  // Carica l'utente autenticato se presente
+  let currentUser = currentUserId ? await getUserById(currentUserId) : null;
+
+  const body = await req.json().catch(() => ({}));
+
+  // Se l'utente non è ancora risolto da cookie ma invia un clientEmail che esiste nel database
+  if (!currentUser && body.clientEmail) {
+    currentUser = await getUserByEmail(String(body.clientEmail));
+  }
+
+  // Verifica se è gestore (ruolo manager): solo "manager" ha i permessi di direzione didattica
+  const isManager = Boolean(
+    currentUser?.role === "manager" ||
+    (currentRole && currentRole.toLowerCase() === "manager")
+  );
+
+  // Verifica proprietà (allievo / studente):
+  // 1) Corrispondenza diretta userId
+  // 2) Corrispondenza email tra l'account registrato e la prenotazione
+  // 3) Se la prenotazione è stata effettuata prima dell'iscrizione con la stessa email
+  const userEmail = currentUser?.email?.toLowerCase().trim();
+  const bookingEmail = existingBooking.clientEmail?.toLowerCase().trim();
+  const bodyEmail = typeof body.clientEmail === "string" ? body.clientEmail.toLowerCase().trim() : null;
+
+  const isOwner = Boolean(
+    (currentUser && existingBooking.userId && existingBooking.userId === currentUser.id) ||
+    (userEmail && bookingEmail && userEmail === bookingEmail) ||
+    (bodyEmail && bookingEmail && bodyEmail === bookingEmail)
+  );
 
   if (!isManager && !isOwner) {
     return Response.json(
@@ -32,8 +57,13 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   }
 
   try {
-    const body = await req.json();
     const patch: Record<string, unknown> = {};
+
+    // Se l'allievo era proprietario tramite email ma non aveva ancora userId associato (prenotato prima dell'iscrizione),
+    // colleghiamo permanentemente la prenotazione al suo account
+    if (currentUser && (!existingBooking.userId || existingBooking.userId !== currentUser.id)) {
+      patch.userId = currentUser.id;
+    }
 
     // Se allievo, non può cambiare l'assegnazione ad altri utenti o cambiare attendanceStatus
     const allowedKeys = isManager
@@ -65,13 +95,31 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   const numId = Number(id);
   if (!Number.isInteger(numId)) return Response.json({ error: "ID non valido" }, { status: 400 });
 
+  const currentUserId = req.cookies.get("auth_user_id")?.value;
   const currentRole = req.cookies.get("auth_role")?.value;
 
-  // Solo il gestore può eliminare definitivamente una riga dal registro
-  // L'allievo può invece annullare la propria prenotazione (impostando status: 'cancelled')
-  if (currentRole !== "manager") {
+  const existingBooking = await getBookingById(numId);
+  if (!existingBooking) {
+    return Response.json({ error: "Prenotazione non trovata" }, { status: 404 });
+  }
+
+  const currentUser = currentUserId ? await getUserById(currentUserId) : null;
+  const isManager = Boolean(
+    currentUser?.role === "manager" ||
+    (currentRole && currentRole.toLowerCase() === "manager")
+  );
+
+  const userEmail = currentUser?.email?.toLowerCase().trim();
+  const bookingEmail = existingBooking.clientEmail?.toLowerCase().trim();
+  const isOwner = Boolean(
+    (currentUser && existingBooking.userId && existingBooking.userId === currentUser.id) ||
+    (userEmail && bookingEmail && userEmail === bookingEmail)
+  );
+
+  // Sia la direzione che l'allievo proprietario possono rimuovere/annullare la propria prenotazione
+  if (!isManager && !isOwner) {
     return Response.json(
-      { error: "Solo la direzione della scuola può eliminare definitivamente un record dal registro." },
+      { error: "Non sei autorizzato a eliminare questa prenotazione." },
       { status: 403 }
     );
   }

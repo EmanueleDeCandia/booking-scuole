@@ -131,9 +131,10 @@ export function BookingModal({
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            userId: user?.id ?? existing.userId ?? null,
             clientName: name,
             service,
-            clientEmail: email || null,
+            clientEmail: email || existing.clientEmail || null,
             clientPhone: phone || null,
             notes: notes || null,
             reminderMinutes: reminder,
@@ -185,7 +186,11 @@ export function BookingModal({
       const res = await fetch(`/api/bookings/${existing.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify({
+          status,
+          userId: user?.id ?? existing.userId ?? null,
+          clientEmail: email || existing.clientEmail || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Errore aggiornamento stato");

@@ -151,9 +151,16 @@ function StudentProfileClient() {
       const res = await fetch(`/api/bookings/${bookingId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "cancelled" }),
+        body: JSON.stringify({
+          status: "cancelled",
+          userId: user?.id ?? null,
+          clientEmail: user?.email ?? null,
+        }),
       });
-      if (!res.ok) throw new Error("Errore cancellazione");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Errore cancellazione");
+      }
       toast.show("Prenotazione annullata.", "info");
       await loadData();
     } catch (err: any) {
