@@ -4,16 +4,33 @@ import "./globals.css";
 import { Nav } from "@/components/Nav";
 import { ToastProvider } from "@/components/Toasts";
 import { AuthProvider } from "@/components/auth/AuthContext";
+import { PwaRegister } from "@/components/PwaRegister";
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  themeColor: "#faf6ee",
 };
 
 export const metadata: Metadata = {
   title: "Naïve Agenda · Prenotazioni & Gestione Corsi",
   description: "Booking app per scuole e studi: agenda 3D sfogliabile, area allievo, profilo personale e promemoria.",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/favicon-32x32.png", sizes: "32x32", type: "image/png" },
+      { url: "/favicon.ico" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Naïve Agenda",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
@@ -26,8 +43,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Caveat:wght@500;700&family=Space+Grotesk:wght@400;500;700&display=swap"
           rel="stylesheet"
         />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body className="antialiased">
+        <PwaRegister />
         {/* filtro SVG per il tratto "a pastello" */}
         <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>
           <filter id="crayon-rough">
