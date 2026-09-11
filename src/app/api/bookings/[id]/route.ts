@@ -67,7 +67,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
     // Se allievo, non può cambiare l'assegnazione ad altri utenti o cambiare attendanceStatus
     const allowedKeys = isManager
-      ? ["clientName", "clientEmail", "clientPhone", "service", "notes", "status", "day", "attendanceStatus", "userId"]
+      ? ["clientName", "clientEmail", "clientPhone", "service", "notes", "status", "day", "attendanceStatus", "userId", "reminderSent"]
       : ["clientName", "clientEmail", "clientPhone", "service", "notes", "status", "day"];
 
     for (const key of allowedKeys) {
@@ -75,6 +75,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     }
     if ("hour" in body) patch.hour = Number(body.hour);
     if ("reminderMinutes" in body) patch.reminderMinutes = Number(body.reminderMinutes);
+    if ("reminderSent" in body) patch.reminderSent = Boolean(body.reminderSent);
 
     const booking = await updateBooking(numId, patch);
     return Response.json({ booking });

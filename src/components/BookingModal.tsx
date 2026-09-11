@@ -580,14 +580,22 @@ export function BookingModal({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={async () => {
-                  if (existing && existing.status === "pending" && isManager) {
+                  if (existing && isManager) {
                     try {
-                      await fetch(`/api/bookings/${existing.id}`, {
-                        method: "PATCH",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ status: "confirmed" }),
-                      });
-                      window.dispatchEvent(new Event("bookings:changed"));
+                      const patch: Record<string, unknown> = {};
+                      if (existing.status === "pending") {
+                        patch.status = "confirmed";
+                      } else if (!existing.reminderSent) {
+                        patch.reminderSent = true;
+                      }
+                      if (Object.keys(patch).length > 0) {
+                        await fetch(`/api/bookings/${existing.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify(patch),
+                        });
+                        window.dispatchEvent(new Event("bookings:changed"));
+                      }
                     } catch {}
                   }
                 }}

@@ -120,6 +120,49 @@ export function DashboardClient({
     }
   };
 
+  const [reminderTab, setReminderTab] = useState<"pending" | "sent">("pending");
+
+  const toggleReminderSent = async (b: BookingDTO, sent: boolean) => {
+    setBookings((prev) =>
+      prev.map((item) => (item.id === b.id ? { ...item, reminderSent: sent } : item))
+    );
+    try {
+      const res = await fetch(`/api/bookings/${b.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reminderSent: sent }),
+      });
+      if (res.ok) {
+        toast.push({
+          title: sent ? "Promemoria Segnato come Inviato" : "Promemoria Riportato da Inviare",
+          message: `${b.clientName} · ${formatDayLong(b.day)} ore ${formatHour(b.hour)}`,
+          tone: sent ? "teal" : "yellow",
+        });
+        reload();
+      } else {
+        reload();
+      }
+    } catch {
+      reload();
+    }
+  };
+
+  const upcomingConfirmed = useMemo(() => {
+    return bookings.filter((b) => b.status === "confirmed" && bookingDateTime(b.day, b.hour) >= now);
+  }, [bookings, now]);
+
+  const pendingReminders = useMemo(() => {
+    return upcomingConfirmed
+      .filter((b) => !b.reminderSent)
+      .sort((a, b) => a.day.localeCompare(b.day) || a.hour - b.hour);
+  }, [upcomingConfirmed]);
+
+  const sentReminders = useMemo(() => {
+    return upcomingConfirmed
+      .filter((b) => b.reminderSent)
+      .sort((a, b) => a.day.localeCompare(b.day) || a.hour - b.hour);
+  }, [upcomingConfirmed]);
+
   const filters: { id: Filter; label: string; n: number }[] = [
     { id: "upcoming", label: "In arrivo", n: stats.upcoming.length },
     { id: "today", label: "Oggi", n: stats.today.length },
@@ -222,37 +265,187 @@ export function DashboardClient({
           </ul>
         </div>
 
-        {/* promemoria */}
-        <div className="sketch p-5">
-          <div className="flex items-center justify-between">
-            <div className="font-display text-xs uppercase tracking-wider">Promemoria inviati</div>
-            <span className="tag bg-crayon-yellow">{reminders.length}</span>
+        {/* Promemoria da Inviare */}
+        <div className="sketch p-5 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-display text-xs uppercase tracking-wider">
+                Promemoria {reminderTab === "pending" ? "da Inviare" : "già Inviati"}
+              </div>
+              <span
+                className={`tag font-bold !py-0.5 !px-2 text-xs ${
+                  pendingReminders.length > 0 ? "bg-crayon-yellow text-ink shadow-xs" : "bg-crayon-green text-white"
+                }`}
+                title={`${pendingReminders.length} promemoria in sospeso`}
+              >
+                {pendingReminders.length > 0 ? `⚠️ ${pendingReminders.length} in sospeso` : "✓ Tutti inviati"}
+              </span>
+            </div>
+
+            {/* Switch Tab: Da Inviare / Già Inviati */}
+            <div className="mt-3 flex gap-1.5 border-b-2 border-ink/20 pb-2">
+              <button
+                type="button"
+                onClick={() => setReminderTab("pending")}
+                className={`tag !py-1 !px-2.5 text-xs font-bold transition-all ${
+                  reminderTab === "pending" ? "bg-ink text-white shadow-sketch" : "bg-white text-ink hover:bg-gray-100"
+                }`}
+              >
+                Da Inviare ({pendingReminders.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setReminderTab("sent")}
+                className={`tag !py-1 !px-2.5 text-xs font-bold transition-all ${
+                  reminderTab === "sent" ? "bg-ink text-white shadow-sketch" : "bg-white text-ink hover:bg-gray-100"
+                }`}
+              >
+                Già Inviati ({sentReminders.length})
+              </button>
+            </div>
+
+            <ul className="scroll-thin mt-3 max-h-[250px] space-y-2.5 overflow-y-auto pr-1">
+              {reminderTab === "pending" ? (
+                pendingReminders.length === 0 ? (
+                  <li className="font-hand text-xl text-ink-soft py-6 text-center">
+                    ☕ Ottimo lavoro! Nessun promemoria in sospeso per le prossime lezioni.
+                  </li>
+                ) : (
+                  pendingReminders.map((b) => (
+                    <li key={b.id} className="sketch-sm bg-white p-3 transition-all hover:shadow-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-hand text-xl font-bold leading-tight truncate text-ink">
+                            {b.clientName}
+                          </div>
+                          <div className="mt-0.5 text-xs font-bold text-crayon-red">
+                            {formatDayLong(b.day)} · {formatHour(b.hour)}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <span
+                              className="tag !py-0.5 !px-2 text-[10px] font-bold text-white shadow-xs"
+                              style={{ background: serviceColor(b.service) }}
+                            >
+                              {b.service}
+                            </span>
+                            {b.clientPhone ? (
+                              <span className="text-[11px] text-ink-soft font-mono font-medium">
+                                📞 {b.clientPhone}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-crayon-red font-bold">
+                                ⚠️ Manca telefono
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {b.clientPhone ? (
+                            <a
+                              href={makeWhatsAppUrl({
+                                phone: b.clientPhone,
+                                clientName: b.clientName,
+                                day: b.day,
+                                hour: b.hour,
+                                service: b.service,
+                                mode: "reminder",
+                              })}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={() => toggleReminderSent(b, true)}
+                              className="btn !py-1 !px-2.5 bg-crayon-green text-white text-xs font-bold shadow-xs hover:scale-105 inline-flex items-center gap-1"
+                              title="Invia promemoria WhatsApp al cliente e imposta come Inviato"
+                            >
+                              💬 Invia WA
+                            </a>
+                          ) : null}
+                          <button
+                            type="button"
+                            onClick={() => toggleReminderSent(b, true)}
+                            className="text-[10px] uppercase font-bold text-ink-soft hover:text-ink underline hover:no-underline"
+                            title="Segna come inviato senza aprire WhatsApp"
+                          >
+                            ✓ Segna fatto
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))
+                )
+              ) : (
+                sentReminders.length === 0 ? (
+                  <li className="font-hand text-xl text-ink-soft py-6 text-center">
+                    Nessun promemoria inviato per le prossime lezioni.
+                  </li>
+                ) : (
+                  sentReminders.map((b) => (
+                    <li key={b.id} className="sketch-sm bg-paper-aged/50 p-3 opacity-90 transition-all hover:opacity-100">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="font-hand text-lg font-bold leading-tight truncate text-ink">
+                            {b.clientName}
+                          </div>
+                          <div className="mt-0.5 text-xs text-ink-soft">
+                            {formatDayLong(b.day)} · {formatHour(b.hour)}
+                          </div>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span className="tag !py-0.5 !px-1.5 text-[10px] bg-crayon-green text-white font-bold">
+                              ✓ Inviato
+                            </span>
+                            <span className="text-[11px] text-ink-soft truncate">{b.service}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                          {b.clientPhone && (
+                            <a
+                              href={makeWhatsAppUrl({
+                                phone: b.clientPhone,
+                                clientName: b.clientName,
+                                day: b.day,
+                                hour: b.hour,
+                                service: b.service,
+                                mode: "reminder",
+                              })}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[11px] font-bold text-crayon-teal hover:underline inline-flex items-center gap-1"
+                              title="Riapri WhatsApp per reinviare il messaggio"
+                            >
+                              💬 Riapri WA
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => toggleReminderSent(b, false)}
+                            className="text-[10px] text-ink-soft hover:text-crayon-red underline hover:no-underline"
+                            title="Riporta questo promemoria tra quelli da inviare"
+                          >
+                            ↺ Annulla invio
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))
+                )
+              )}
+            </ul>
           </div>
-          <ul className="scroll-thin mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
-            {reminders.length === 0 && (
-              <li className="font-hand text-xl text-ink-soft">
-                I promemoria compaiono qui (e come notifica) quando manca poco all&apos;appuntamento.
-              </li>
-            )}
-            {reminders.map((n) => (
-              <li key={n.id} className="sketch-sm bg-white px-3 py-2">
-                <div className="font-hand text-lg leading-tight">⏰ {n.message}</div>
-                <div className="text-[10px] uppercase tracking-wider text-ink-soft">
-                  {new Date(n.createdAt).toLocaleString("it-IT", { dateStyle: "short", timeStyle: "short" })}
-                </div>
-              </li>
-            ))}
-          </ul>
-          <button
-            className="btn mt-3"
-            onClick={async () => {
-              const r = await fetch("/api/reminders/run", { method: "POST" }).then((x) => x.json());
-              toast.push({ title: "Controllo promemoria", message: `${r.created} nuovi promemoria`, tone: "teal" });
-              reload();
-            }}
-          >
-            ⟳ Controlla ora
-          </button>
+
+          <div className="mt-3 pt-2 border-t border-ink/10 flex items-center justify-between">
+            <span className="font-hand text-lg text-ink-soft">
+              {pendingReminders.length > 0 ? `${pendingReminders.length} promemoria da inviare` : "Tutti avvisati"}
+            </span>
+            <button
+              type="button"
+              className="btn text-xs !py-1 !px-2.5 font-bold"
+              onClick={() => reload()}
+              title="Ricarica l'elenco delle prenotazioni"
+            >
+              ⟳ Aggiorna
+            </button>
+          </div>
         </div>
       </div>
 
@@ -341,11 +534,13 @@ export function DashboardClient({
                             title={
                               b.status === "pending"
                                 ? "Invia conferma WhatsApp e imposta lo stato su Confermato"
-                                : "Invia promemoria WhatsApp al cliente (testo precompilato)"
+                                : "Invia promemoria WhatsApp al cliente e imposta come Inviato"
                             }
                             onClick={() => {
                               if (b.status === "pending") {
                                 quick(b, "confirmed");
+                              } else if (!b.reminderSent) {
+                                toggleReminderSent(b, true);
                               }
                             }}
                           >
@@ -355,7 +550,13 @@ export function DashboardClient({
                       </div>
                     </td>
                     <td className="border-y-2 border-ink px-4 py-3.5">
-                      <StatusPill status={b.status} sent={b.reminderSent} attendance={b.attendanceStatus} isPast={isPast} />
+                      <StatusPill
+                        status={b.status}
+                        sent={b.reminderSent}
+                        attendance={b.attendanceStatus}
+                        isPast={isPast}
+                        onToggleReminder={!isPast && b.status === "confirmed" ? () => toggleReminderSent(b, !b.reminderSent) : undefined}
+                      />
                     </td>
                     <td className="rounded-r-xl border-y-2 border-r-2 border-ink px-4 py-3.5">
                       <div className="flex flex-wrap items-center justify-end gap-2">
@@ -470,7 +671,19 @@ function Stat({ label, value, bg, rot }: { label: string; value: number; bg: str
   );
 }
 
-function StatusPill({ status, sent, attendance, isPast }: { status: string; sent: boolean; attendance?: string; isPast: boolean }) {
+function StatusPill({
+  status,
+  sent,
+  attendance,
+  isPast,
+  onToggleReminder,
+}: {
+  status: string;
+  sent: boolean;
+  attendance?: string;
+  isPast: boolean;
+  onToggleReminder?: () => void;
+}) {
   const map: Record<string, { l: string; c: string }> = {
     pending_confirmation: { l: "in attesa di conferma", c: "bg-crayon-yellow text-ink border-2 border-ink font-bold shadow-xs" },
     pending: { l: "in attesa", c: "bg-crayon-yellow text-ink border-2 border-ink font-bold shadow-xs" },
@@ -503,9 +716,31 @@ function StatusPill({ status, sent, attendance, isPast }: { status: string; sent
         )}
       </div>
       {status === "confirmed" && (
-        <span className="text-[11px] sm:text-xs uppercase tracking-wider text-ink-soft">
-          {sent ? "⏰ promemoria inviato" : "⏰ promemoria in attesa"}
-        </span>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleReminder?.();
+          }}
+          disabled={!onToggleReminder}
+          className={`group flex items-center gap-1 text-[11px] sm:text-xs uppercase tracking-wider text-left transition-colors ${
+            sent ? "text-crayon-green font-bold hover:text-ink" : "text-crayon-red font-bold hover:text-ink"
+          } ${onToggleReminder ? "cursor-pointer" : "cursor-default"}`}
+          title={
+            onToggleReminder
+              ? sent
+                ? "Promemoria già inviato. Clicca per reimpostarlo a 'in attesa'"
+                : "Promemoria non ancora inviato. Clicca per segnarlo come 'inviato'"
+              : undefined
+          }
+        >
+          <span>{sent ? "✓ ⏰ promemoria inviato" : "⚠️ ⏰ promemoria in attesa"}</span>
+          {onToggleReminder && (
+            <span className="opacity-0 group-hover:opacity-100 text-[10px] underline font-normal lowercase">
+              ({sent ? "annulla" : "segna inviato"})
+            </span>
+          )}
+        </button>
       )}
       {status === "pending" && (
         <span className="text-[11px] sm:text-xs uppercase tracking-wider text-crayon-red font-bold">
