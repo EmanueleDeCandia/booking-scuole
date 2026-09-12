@@ -10,10 +10,10 @@ export const MONTH_NAMES_IT = [
 ];
 
 export const SERVICES = [
-  { id: "Consulenza", label: "Consulenza", color: "#e8542f" },
-  { id: "Taglio", label: "Taglio & Piega", color: "#4fb3bf" },
+  { id: "Formazione", label: "Formazione", color: "#e8542f" },
+  { id: "Backstage", label: "Backstage", color: "#4fb3bf" },
   { id: "Massaggio", label: "Massaggio", color: "#f2b632" },
-  { id: "Visita", label: "Visita", color: "#7a5cff" },
+  { id: "Concorso", label: "Concorso", color: "#7a5cff" },
   { id: "Lezione", label: "Lezione", color: "#3c9a5f" },
 ];
 
@@ -100,6 +100,25 @@ export type UserDTO = {
   gamification?: GamificationProfile;
 };
 
+export type UserWithStatsDTO = UserDTO & {
+  bookingsCount: number;
+  upcomingBookingsCount: number;
+};
+
+export type DeletedUserDTO = {
+  id: string;
+  originalId: string;
+  email: string;
+  displayName: string;
+  phone: string | null;
+  role: string;
+  notes: string | null;
+  deletedAt: string;
+  deletedBy: string;
+  reason: string;
+  userData?: Partial<UserDTO>;
+};
+
 export type NotificationDTO = {
   id: number;
   bookingId: number | null;
@@ -181,7 +200,13 @@ const COURSE_COLORS: Record<string, string> = {
 
 export function serviceColor(service: string): string {
   if (COURSE_COLORS[service]) return COURSE_COLORS[service];
-  return SERVICES.find((s) => s.id === service)?.color ?? "#2f7bbf";
+  const found = SERVICES.find((s) => s.id === service || s.label === service);
+  if (found) return found.color;
+  // Compatibilità storica
+  if (service === "Consulenza") return "#e8542f";
+  if (service === "Taglio" || service === "Taglio & Piega") return "#4fb3bf";
+  if (service === "Visita") return "#7a5cff";
+  return "#2f7bbf";
 }
 
 /** Genera il link per aprire direttamente Google Calendar con campi precompilati */

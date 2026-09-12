@@ -9,7 +9,7 @@ export default async function DashboardPage() {
   await runReminderSweep();
   const [bookings, notifications] = await Promise.all([
     listBookings({ includeCancelled: true }),
-    listNotifications(50, { role: "manager" }),
+    listNotifications(20, { role: "manager" }),
   ]);
   return (
     <main className="pt-2">

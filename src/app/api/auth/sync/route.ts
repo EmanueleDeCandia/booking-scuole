@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { upsertUser, getUserById } from "@/lib/users-service";
+import { upsertUser, getUserById, getUserByEmail } from "@/lib/users-service";
 import { adminAuth, isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 
 export async function POST(req: NextRequest) {
@@ -36,7 +36,6 @@ export async function POST(req: NextRequest) {
         verifiedName = decoded.name || displayName || decoded.email?.split("@")[0] || "Utente";
       } catch (err) {
         console.warn("Firebase token verification warning (skipped for pre-production):", err);
-        // In pre-produzione non blocchiamo l'iscrizione
         verifiedUid = uid || `user-${email.split("@")[0]}`;
         verifiedEmail = email;
       }
@@ -62,7 +61,7 @@ export async function POST(req: NextRequest) {
       path: "/",
       maxAge: 60 * 60 * 24 * 30, // 30 giorni
       sameSite: "lax",
-      httpOnly: false, // accessibile anche dal client se necessario
+      httpOnly: false,
     });
     res.cookies.set("auth_role", user.role, {
       path: "/",
@@ -80,11 +79,23 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
+    const emailParam = req.nextUrl.searchParams.get("email");
+    if (emailParam) {
+      const user = await getUserByEmail(emailParam.toLowerCase().trim());
+      return NextResponse.json({ user });
+    }
+
     const userId = req.cookies.get("auth_user_id")?.value;
     if (!userId) {
       return NextResponse.json({ user: null });
     }
     const user = await getUserById(userId);
+    if (!user) {
+      const res = NextResponse.json({ user: null });
+      res.cookies.delete("auth_user_id");
+      res.cookies.delete("auth_role");
+      return res;
+    }
     return NextResponse.json({ user });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

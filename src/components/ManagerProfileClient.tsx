@@ -4,9 +4,12 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "./auth/AuthContext";
 import { useToast } from "./Toasts";
+import { auth } from "@/lib/firebase";
+import { updateProfile as fbUpdateProfile } from "firebase/auth";
 import type { CourseDTO } from "@/lib/courses-service";
 import type { UserDTO } from "@/lib/agenda";
 import { StudentGamificationCard } from "./StudentGamificationCard";
+import { RegisteredUsersModal } from "./RegisteredUsersModal";
 
 type MetricsData = {
   totalCourses: number;
@@ -26,7 +29,7 @@ type MetricsData = {
 };
 
 export function ManagerProfileClient() {
-  const { user, refreshProfile, signOut, loading: authLoading } = useAuth();
+  const { user, refreshProfile, updateCurrentUser, signOut, loading: authLoading } = useAuth();
   const toast = useToast();
 
   const [metrics, setMetrics] = useState<MetricsData | null>(null);
@@ -69,6 +72,11 @@ export function ManagerProfileClient() {
   const [honorDescInput, setHonorDescInput] = useState("Perfezionamento tecnico ed interpretazione impeccabile.");
   const [honorSymbolInput, setHonorSymbolInput] = useState<string>("medal");
   const [submittingGamification, setSubmittingGamification] = useState(false);
+  const [showUsersModal, setShowUsersModal] = useState(false);
+
+  // Modale e stato eliminazione corso
+  const [courseToDelete, setCourseToDelete] = useState<CourseDTO | null>(null);
+  const [deletingCourse, setDeletingCourse] = useState(false);
 
   const loadAll = useCallback(async () => {
     try {
@@ -107,6 +115,43 @@ export function ManagerProfileClient() {
     }
   }, [authLoading, user, loadAll]);
 
+  useEffect(() => {
+    const handler = () => loadAll();
+    window.addEventListener("users:changed", handler);
+    window.addEventListener("bookings:changed", handler);
+    window.addEventListener("courses:changed", handler);
+    return () => {
+      window.removeEventListener("users:changed", handler);
+      window.removeEventListener("bookings:changed", handler);
+      window.removeEventListener("courses:changed", handler);
+    };
+  }, [loadAll]);
+
+  // Eliminazione Corso con conferma
+  const handleDeleteCourse = async () => {
+    if (!courseToDelete) return;
+    setDeletingCourse(true);
+    try {
+      const res = await fetch(`/api/courses?id=${courseToDelete.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Errore durante l'eliminazione del corso");
+      }
+
+      toast.show(`🗑️ Corso "${courseToDelete.title}" eliminato con successo!`, "info");
+      setCourseToDelete(null);
+      await loadAll();
+      window.dispatchEvent(new Event("courses:changed"));
+    } catch (err: any) {
+      console.error(err);
+      toast.show(err.message || "Impossibile eliminare il corso", "error");
+    } finally {
+      setDeletingCourse(false);
+    }
+  };
+
   // Caricamento Foto
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -142,18 +187,30 @@ export function ManagerProfileClient() {
     if (!user) return;
     setSavingProfile(true);
     try {
+      if (auth?.currentUser && displayName.trim()) {
+        try {
+          await fbUpdateProfile(auth.currentUser, { displayName: displayName.trim() });
+        } catch (fbErr) {
+          console.warn("Could not update Firebase displayName:", fbErr);
+        }
+      }
+
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          displayName,
-          phone,
-          notes,
+          displayName: displayName.trim(),
+          phone: phone.trim(),
+          notes: notes.trim(),
         }),
       });
       if (!res.ok) throw new Error("Errore aggiornamento dati");
-      toast.show("Dati scuola / gestore salvati!", "info");
+      const resData = await res.json();
+      if (resData.user) {
+        updateCurrentUser(resData.user);
+      }
+      toast.show("Dati scuola / gestore salvati con successo! 💾", "info");
       setIsEditingProfile(false);
       await refreshProfile();
     } catch (err: any) {
@@ -357,6 +414,16 @@ export function ManagerProfileClient() {
                 className="btn !py-2 !px-3.5 text-xs font-semibold"
               >
                 ✏️ {isEditingProfile ? "Chiudi Modifica" : "Modifica Dati"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowUsersModal(true)}
+                className="btn btn-ink !py-2 !px-3.5 text-xs font-bold shadow-sm flex items-center gap-1.5"
+                title="Visualizza e gestisci tutti gli utenti registrati nel database"
+              >
+                <span>👥</span>
+                <span>Utenti Registrati</span>
               </button>
 
               <button
@@ -598,37 +665,54 @@ export function ManagerProfileClient() {
             {activeCoursesList.map((c) => (
               <div
                 key={c.id}
-                className="relative rounded-lg border-2 border-ink/30 bg-white p-4 shadow-xs transition-transform hover:-translate-y-0.5"
+                className="relative rounded-lg border-2 border-ink/30 bg-white p-4 shadow-xs transition-transform hover:-translate-y-0.5 flex flex-col justify-between"
                 style={{ borderLeft: `6px solid ${c.color}` }}
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <span className="tag bg-crayon-yellow/40 text-ink text-[10px] font-bold uppercase !py-0 !px-1.5">
-                      {c.category}
-                    </span>
-                    <h3 className="font-display text-base uppercase font-bold text-ink mt-1">
-                      {c.title}
-                    </h3>
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <span className="tag bg-crayon-yellow/40 text-ink text-[10px] font-bold uppercase !py-0 !px-1.5">
+                        {c.category}
+                      </span>
+                      <h3 className="font-display text-base uppercase font-bold text-ink mt-1">
+                        {c.title}
+                      </h3>
+                    </div>
+                    {c.price && (
+                      <span className="tag bg-crayon-teal text-white text-xs font-bold !py-0.5 !px-2 shadow-xs shrink-0">
+                        € {c.price} / mese
+                      </span>
+                    )}
                   </div>
-                  {c.price && (
-                    <span className="tag bg-crayon-teal text-white text-xs font-bold !py-0.5 !px-2 shadow-xs">
-                      € {c.price} / mese
-                    </span>
-                  )}
+
+                  <div className="mt-3 space-y-1 text-xs text-ink-soft">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-ink">Docente:</span> {c.instructor}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-ink">Capienza aula:</span> fino a {c.maxCapacity} allievi
+                    </div>
+                    {c.description && (
+                      <p className="font-hand text-sm text-ink-soft/90 pt-1">
+                        {c.description}
+                      </p>
+                    )}
+                  </div>
                 </div>
 
-                <div className="mt-3 space-y-1 text-xs text-ink-soft">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-ink">Docente:</span> {c.instructor}
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-medium text-ink">Capienza aula:</span> fino a {c.maxCapacity} allievi
-                  </div>
-                  {c.description && (
-                    <p className="font-hand text-sm text-ink-soft/90 pt-1">
-                      {c.description}
-                    </p>
-                  )}
+                <div className="mt-3.5 pt-2 border-t border-dashed border-ink/20 flex items-center justify-between">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-ink-soft">
+                    ID #{c.id}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCourseToDelete(c)}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-crayon-red hover:text-white hover:bg-crayon-red py-1 px-2.5 rounded-md border border-crayon-red/40 transition-colors shadow-xs"
+                    title={`Elimina il corso attivo "${c.title}"`}
+                  >
+                    <span>🗑️</span>
+                    <span>Elimina Corso</span>
+                  </button>
                 </div>
               </div>
             ))}
@@ -718,7 +802,7 @@ export function ManagerProfileClient() {
                       </div>
                     </div>
 
-                    {/* SELETTORE RATING DA 1 A 10 */}
+                    {/* SELETTORE RATING DA 1 A 10 & PULSANTE ELIMINA */}
                     <div className="mt-3.5 pt-1">
                       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                         <span className="font-display text-xs uppercase font-bold text-ink flex items-center gap-1">
@@ -729,29 +813,41 @@ export function ManagerProfileClient() {
                         </span>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => {
-                          const isHigh = rating >= 8;
-                          const isMid = rating >= 5 && rating < 8;
-                          return (
-                            <button
-                              key={rating}
-                              type="button"
-                              disabled={votingCourseId === course.id}
-                              onClick={() => handleVoteAppeal(course.id, rating)}
-                              className={`h-8 w-8 sm:h-9 sm:w-9 rounded-md border-2 border-ink font-display text-xs font-bold transition-all shadow-xs hover:scale-105 active:scale-95 ${
-                                isHigh
-                                  ? "bg-crayon-green text-white hover:bg-crayon-green/90"
-                                  : isMid
-                                  ? "bg-crayon-yellow text-ink hover:bg-crayon-yellow/90"
-                                  : "bg-white text-ink hover:bg-crayon-red/20"
-                              }`}
-                              title={`Vota ${rating} su 10`}
-                            >
-                              {rating}
-                            </button>
-                          );
-                        })}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => {
+                            const isHigh = rating >= 8;
+                            const isMid = rating >= 5 && rating < 8;
+                            return (
+                              <button
+                                key={rating}
+                                type="button"
+                                disabled={votingCourseId === course.id}
+                                onClick={() => handleVoteAppeal(course.id, rating)}
+                                className={`h-8 w-8 sm:h-9 sm:w-9 rounded-md border-2 border-ink font-display text-xs font-bold transition-all shadow-xs hover:scale-105 active:scale-95 ${
+                                  isHigh
+                                    ? "bg-crayon-green text-white hover:bg-crayon-green/90"
+                                    : isMid
+                                    ? "bg-crayon-yellow text-ink hover:bg-crayon-yellow/90"
+                                    : "bg-white text-ink hover:bg-crayon-red/20"
+                                }`}
+                                title={`Vota ${rating} su 10`}
+                              >
+                                {rating}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setCourseToDelete(course)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-crayon-red hover:text-white hover:bg-crayon-red py-1 px-2.5 rounded-md border border-crayon-red/40 transition-colors shadow-xs ml-auto"
+                          title={`Elimina la proposta di corso "${course.title}"`}
+                        >
+                          <span>🗑️</span>
+                          <span>Elimina Proposta</span>
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1311,6 +1407,125 @@ export function ManagerProfileClient() {
             </div>
           </div>
         )}
+
+        {/* MODALE CONFERMA ELIMINAZIONE CORSO */}
+        {courseToDelete && (
+          <div
+            className="fixed inset-0 z-[110] grid place-items-center bg-ink/50 p-4 backdrop-blur-[2px]"
+            onClick={() => !deletingCourse && setCourseToDelete(null)}
+          >
+            <div
+              onClick={(e) => e.stopPropagation()}
+              className="sketch wobble-in relative w-full max-w-md bg-[#fffdf5] p-5 sm:p-6"
+              style={{ transform: "rotate(-0.3deg)" }}
+            >
+              <div
+                className="absolute -top-3 left-1/2 h-6 w-28 -translate-x-1/2 rotate-[-2deg] bg-crayon-red/80"
+                style={{ clipPath: "polygon(2% 0, 100% 4%, 98% 100%, 0 96%)" }}
+              />
+
+              <div className="flex items-start justify-between border-b-2 border-dashed border-ink/20 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl">⚠️</span>
+                  <div>
+                    <h3 className="font-display text-lg uppercase font-bold text-crayon-red">
+                      Conferma Eliminazione
+                    </h3>
+                    <p className="text-xs text-ink-soft">
+                      Verifica prima di rimuovere il corso
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={deletingCourse}
+                  onClick={() => setCourseToDelete(null)}
+                  className="btn !px-2.5 !py-0.5 text-sm"
+                  title="Chiudi"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <div
+                  className="rounded-lg border-2 border-ink/20 bg-white p-3.5 shadow-xs"
+                  style={{ borderLeft: `6px solid ${courseToDelete.color || "#e8542f"}` }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="tag bg-crayon-yellow/40 text-ink text-[10px] font-bold uppercase !py-0 !px-1.5">
+                      {courseToDelete.category}
+                    </span>
+                    <span className={`tag text-[10px] font-bold uppercase !py-0 !px-1.5 ${
+                      courseToDelete.status === "active"
+                        ? "bg-crayon-teal text-white"
+                        : "bg-crayon-red/20 text-crayon-red"
+                    }`}>
+                      {courseToDelete.status === "active" ? "Corso Attivo" : "In Programma (Sondaggio)"}
+                    </span>
+                  </div>
+                  <h4 className="font-display text-base uppercase font-bold text-ink mt-1.5">
+                    {courseToDelete.title}
+                  </h4>
+                  <div className="text-xs text-ink-soft mt-1">
+                    Docente: <strong>{courseToDelete.instructor}</strong> · Capienza: {courseToDelete.maxCapacity} allievi
+                    {courseToDelete.price ? ` · € ${courseToDelete.price}/mese` : ""}
+                  </div>
+                </div>
+
+                <div className="rounded-md bg-crayon-red/10 border border-crayon-red/30 p-3 text-xs text-ink space-y-1">
+                  <p className="font-bold text-crayon-red flex items-center gap-1">
+                    <span>🛑</span>
+                    <span>Attenzione: azione non reversibile!</span>
+                  </p>
+                  <p className="text-ink-soft leading-relaxed">
+                    Eliminando questo corso verrà rimosso dall&apos;agenda didattica, dal catalogo della scuola
+                    e verranno cancellati anche tutti i voti di appeal eventualmente registrati.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 pt-3 border-t-2 border-dashed border-ink/20 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  disabled={deletingCourse}
+                  onClick={() => setCourseToDelete(null)}
+                  className="btn btn-ink-soft !py-2 !px-4 text-xs font-bold"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  disabled={deletingCourse}
+                  onClick={handleDeleteCourse}
+                  className="btn btn-red !py-2 !px-4 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+                >
+                  {deletingCourse ? (
+                    <>
+                      <span className="animate-spin text-sm">⏳</span>
+                      <span>Eliminazione in corso…</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>🗑️</span>
+                      <span>Sì, Elimina Definitivamente</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODALE FINESTRA UTENTI REGISTRATI NEL DATABASE */}
+        <RegisteredUsersModal
+          isOpen={showUsersModal}
+          onClose={() => {
+            setShowUsersModal(false);
+            loadAll();
+          }}
+          currentManagerEmail={user?.email}
+        />
 
       </div>
     </div>

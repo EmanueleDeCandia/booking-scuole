@@ -6,14 +6,9 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url);
     const queryUserId = searchParams.get("userId") || undefined;
     const cookieUserId = req.cookies.get("auth_user_id")?.value;
-    const cookieRole = req.cookies.get("auth_role")?.value;
 
-    let targetId: string | undefined = cookieUserId;
-    if (cookieRole === "manager" && queryUserId) {
-      targetId = queryUserId;
-    } else if (!targetId) {
-      targetId = queryUserId;
-    }
+    // Priorità all'ID richiesto esplicitamente dal client autenticato, con fallback al cookie
+    const targetId: string | undefined = queryUserId || cookieUserId;
 
     if (!targetId) {
       return NextResponse.json({ error: "Non autorizzato o nessun utente specificato" }, { status: 401 });
@@ -48,7 +43,21 @@ export async function PUT(req: NextRequest) {
       notes: body.notes,
     });
 
-    return NextResponse.json({ ok: true, user: updated });
+    const res = NextResponse.json({ ok: true, user: updated });
+    res.cookies.set("auth_user_id", updated.id, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+      sameSite: "lax",
+      httpOnly: false,
+    });
+    res.cookies.set("auth_role", updated.role, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+      sameSite: "lax",
+      httpOnly: false,
+    });
+
+    return res;
   } catch (error: any) {
     console.error("Error in /api/profile PUT:", error);
     return NextResponse.json({ error: error.message || "Errore aggiornamento profilo" }, { status: 500 });

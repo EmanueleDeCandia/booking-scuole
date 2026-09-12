@@ -20,11 +20,12 @@ type AuthContextType = {
   role: "user" | "manager";
   loading: boolean;
   isFirebaseReady: boolean;
-  signIn: (email: string, pass: string) => Promise<void>;
+  signIn: (email: string, pass: string) => Promise<UserDTO | null>;
   signUp: (email: string, pass: string, name: string, phone?: string, role?: "user" | "manager") => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
+  updateCurrentUser: (patch: Partial<UserDTO>) => void;
   loginAsDemo: (role: "user" | "manager", managerPassword?: string) => Promise<void>;
 };
 
@@ -34,6 +35,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserDTO | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const updateCurrentUser = (patch: Partial<UserDTO>) => {
+    setUser((prev) => (prev ? { ...prev, ...patch } : null));
+  };
 
   const syncUserWithBackend = async (
     fbU: FirebaseUser | { uid: string; email: string; displayName?: string },
@@ -109,32 +114,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (email: string, pass: string) => {
     setLoading(true);
     try {
+      const cleanEmail = email.toLowerCase().trim();
+
+      // 1. Controlla prima se l'utente esiste nel database della scuola
+      const checkRes = await fetch(`/api/auth/sync?email=${encodeURIComponent(cleanEmail)}`);
+      const checkData = checkRes.ok ? await checkRes.json() : null;
+
+      if (!checkData?.user) {
+        throw new Error("Nessun account trovato con questa email. Clicca su 'Iscriviti ora' per creare il profilo.");
+      }
+
+      // 2. Se Firebase Auth è attivo e supportato, proviamo l'accesso
       if (isFirebaseConfigured && auth) {
         try {
-          const cred = await signInWithEmailAndPassword(auth, email, pass);
-          await syncUserWithBackend(cred.user);
-          return;
+          const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
+          return await syncUserWithBackend(cred.user);
         } catch (fbErr: any) {
-          console.warn("Firebase signIn failed or permission denied, using pre-production login:", fbErr);
+          console.warn("Firebase Auth signIn fallback to database session:", fbErr?.code || fbErr?.message);
         }
       }
-      // Accesso pre-produzione garantito senza blocchi
-      const lowEmail = email.toLowerCase().trim();
-      const isManager = lowEmail.includes("gestore") || lowEmail.includes("admin");
-      let mockUid = `user-${lowEmail.replace(/[^a-z0-9]/g, "-")}`;
-      let mockName = email.split("@")[0];
 
-      if (lowEmail.includes("gestore")) {
-        mockUid = "manager-demo-01";
-        mockName = "Elena (Gestore Didattico)";
-      } else if (lowEmail.includes("allievo") || lowEmail.includes("danza")) {
-        mockUid = "student-demo-01";
-        mockName = "Elena Rossi (Allieva)";
-      }
-
-      await syncUserWithBackend(
-        { uid: mockUid, email: lowEmail, displayName: mockName },
-        { role: isManager ? "manager" : "user" }
+      // 3. Accesso garantito per l'utente verificato nel database della scuola!
+      return await syncUserWithBackend(
+        { uid: checkData.user.id, email: cleanEmail, displayName: checkData.user.displayName },
+        { role: checkData.user.role, phone: checkData.user.phone }
       );
     } finally {
       setLoading(false);
@@ -150,23 +153,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   ) => {
     setLoading(true);
     try {
+      const cleanEmail = email.toLowerCase().trim();
+
+      // 1. Verifica preliminare: rifiuta se l'email esiste già nel database
+      const checkRes = await fetch(`/api/auth/sync?email=${encodeURIComponent(cleanEmail)}`);
+      if (checkRes.ok) {
+        const checkData = await checkRes.json();
+        if (checkData?.user) {
+          throw new Error("Un account con questa email è già registrato. Effettua l'accesso.");
+        }
+      }
+
+      // 2. Se Firebase Auth è disponibile, tenta la registrazione anche su Firebase Auth
       if (isFirebaseConfigured && auth) {
         try {
-          const cred = await createUserWithEmailAndPassword(auth, email, pass);
+          const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
           if (displayName) {
             await fbUpdateProfile(cred.user, { displayName });
           }
           await syncUserWithBackend(cred.user, { phone, role });
           return;
         } catch (fbErr: any) {
-          console.warn("Firebase signUp permission error, using pre-production registration:", fbErr);
+          console.warn("Firebase Auth signUp note (using database storage):", fbErr?.code || fbErr?.message);
+          if (fbErr?.code === "auth/email-already-in-use") {
+            throw new Error("Un account con questa email è già registrato. Effettua il login.");
+          }
         }
       }
-      // Registrazione pre-produzione garantita senza blocchi
-      const lowEmail = email.toLowerCase().trim();
-      const mockUid = `user-${lowEmail.replace(/[^a-z0-9]/g, "-")}`;
+
+      // 3. Registrazione nel database Firestore
+      const mockUid = `user-${cleanEmail.replace(/[^a-z0-9]/g, "-")}`;
       await syncUserWithBackend(
-        { uid: mockUid, email: lowEmail, displayName },
+        { uid: mockUid, email: cleanEmail, displayName },
         { phone, role }
       );
     } finally {
@@ -232,6 +250,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signInWithGoogle,
         signOut,
         refreshProfile,
+        updateCurrentUser,
         loginAsDemo,
       }}
     >

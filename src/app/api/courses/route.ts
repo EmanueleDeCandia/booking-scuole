@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listCourses, createCourse, getManagerDashboardMetrics } from "@/lib/courses-service";
+import { listCourses, createCourse, deleteCourse, getManagerDashboardMetrics } from "@/lib/courses-service";
 
 export const dynamic = "force-dynamic";
 
@@ -46,3 +46,33 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message || "Errore creazione corso" }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const idParam = searchParams.get("id");
+    let courseId: number | null = null;
+
+    if (idParam) {
+      courseId = parseInt(idParam, 10);
+    } else {
+      const body = await req.json().catch(() => ({}));
+      if (body.id) courseId = Number(body.id);
+      else if (body.courseId) courseId = Number(body.courseId);
+    }
+
+    if (!courseId || isNaN(courseId)) {
+      return NextResponse.json({ error: "ID del corso mancante o non valido" }, { status: 400 });
+    }
+
+    await deleteCourse(courseId);
+    return NextResponse.json({ ok: true, deletedId: courseId, message: "Corso eliminato con successo" });
+  } catch (error: any) {
+    console.error("Error in /api/courses DELETE:", error);
+    if (error.message === "CORSO_NON_TROVATO") {
+      return NextResponse.json({ error: "Corso non trovato o già rimosso" }, { status: 404 });
+    }
+    return NextResponse.json({ error: error.message || "Errore durante l'eliminazione del corso" }, { status: 500 });
+  }
+}
+

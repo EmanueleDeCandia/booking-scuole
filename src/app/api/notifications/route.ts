@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { listNotifications, markNotificationsRead, runReminderSweep } from "@/lib/bookings-service";
+import { listNotifications, markNotificationsRead, clearNotifications, runReminderSweep } from "@/lib/bookings-service";
 import { getUserById } from "@/lib/users-service";
 
 export const dynamic = "force-dynamic";
@@ -33,11 +33,11 @@ async function resolveUserFilter(req: NextRequest) {
   return { userId, role, email };
 }
 
-/** Restituisce le notifiche; esegue prima lo sweep dei promemoria così il polling client li riceve. */
+/** Restituisce le notifiche (limite massimo di 20); esegue prima lo sweep dei promemoria così il polling client li riceve. */
 export async function GET(req: NextRequest) {
   await runReminderSweep();
   const filter = await resolveUserFilter(req);
-  const data = await listNotifications(50, filter);
+  const data = await listNotifications(20, filter);
   return Response.json(data);
 }
 
@@ -49,4 +49,12 @@ export async function PATCH(req: NextRequest) {
   await markNotificationsRead(ids, filter);
   return Response.json({ ok: true });
 }
+
+/** Cancella / svuota le notifiche. */
+export async function DELETE(req: NextRequest) {
+  const filter = await resolveUserFilter(req);
+  await clearNotifications(filter);
+  return Response.json({ ok: true, message: "Notifiche rimosse con successo" });
+}
+
 

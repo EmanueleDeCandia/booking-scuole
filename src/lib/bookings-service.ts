@@ -21,6 +21,7 @@ import {
   type NotificationDTO,
 } from "./agenda";
 import { addStudentXp, recordAttendanceGamification } from "./users-service";
+import { sendBookingConfirmationEmail, sendBookingCancellationEmail } from "./email";
 
 export function toBookingDTO(b: any): BookingDTO {
   const status = (b.status as any) || "pending";
@@ -192,6 +193,17 @@ export async function createBooking(input: {
     console.warn("Could not write notification:", err);
   }
 
+  // Notifica email automatica se Resend è configurato
+  if (newBooking.clientEmail) {
+    sendBookingConfirmationEmail({
+      clientName: newBooking.clientName,
+      clientEmail: newBooking.clientEmail,
+      service: newBooking.service,
+      day: newBooking.day,
+      hour: newBooking.hour,
+    }).catch(() => {});
+  }
+
   // Gamification: +6 XP per nuova lezione prenotata
   if (newBooking.userId) {
     addStudentXp(newBooking.userId, 6).catch(() => {});
@@ -312,6 +324,20 @@ export async function updateBooking(
     } catch {}
   }
 
+  // Invio email di cancellazione se Resend è configurato
+  if (patch.status === "cancelled") {
+    const cancelEmail = row.clientEmail || before.clientEmail;
+    if (cancelEmail) {
+      sendBookingCancellationEmail({
+        clientName: row.clientName || before.clientName,
+        clientEmail: cancelEmail,
+        service: row.service || before.service,
+        day: row.day || before.day,
+        hour: Number(row.hour || before.hour),
+      }).catch(() => {});
+    }
+  }
+
   // Gamification: +10 XP e streak per convalida presenza o completamento lezione
   if ((patch.attendanceStatus === "present" || patch.status === "done") && row.userId) {
     recordAttendanceGamification(row.userId, row.day).catch(() => {});
@@ -377,10 +403,57 @@ export type NotificationFilter = {
   role?: string | null;
 };
 
+export async function pruneOldNotifications(maxLimit = 20): Promise<number> {
+  try {
+    const snap = await getDocs(collection(firestore, "notifications"));
+    if (snap.size <= maxLimit) return 0;
+
+    const allDocs = snap.docs.map((d) => ({
+      ref: d.ref,
+      createdAt: d.data().createdAt ? new Date(d.data().createdAt).getTime() : 0,
+    }));
+
+    allDocs.sort((a, b) => b.createdAt - a.createdAt);
+    const toRemove = allDocs.slice(maxLimit);
+    for (const item of toRemove) {
+      await deleteDoc(item.ref);
+    }
+    return toRemove.length;
+  } catch (err) {
+    console.warn("Could not prune old notifications:", err);
+    return 0;
+  }
+}
+
+export async function clearNotifications(filter?: NotificationFilter): Promise<void> {
+  const isManager = filter?.role === "manager";
+  const targetUserId = filter?.userId?.trim();
+  const targetEmail = filter?.email?.toLowerCase().trim();
+
+  const snap = await getDocs(collection(firestore, "notifications"));
+  for (const docSnap of snap.docs) {
+    const data = docSnap.data();
+    if (!isManager && (targetUserId || targetEmail)) {
+      let belongsToUser = false;
+      if (targetUserId && data.userId && data.userId === targetUserId) {
+        belongsToUser = true;
+      }
+      if (!belongsToUser && targetEmail && data.clientEmail && String(data.clientEmail).toLowerCase() === targetEmail) {
+        belongsToUser = true;
+      }
+      if (!belongsToUser) continue;
+    }
+    await deleteDoc(docSnap.ref);
+  }
+}
+
 export async function listNotifications(
-  limitCount = 30,
+  limitCount = 20,
   filter?: NotificationFilter
 ): Promise<{ items: NotificationDTO[]; unread: number }> {
+  // Pulisce le notifiche più vecchie per mantenere la collezione snella ed evitare accumuli
+  await pruneOldNotifications(limitCount);
+
   const snap = await getDocs(collection(firestore, "notifications"));
   let list: NotificationDTO[] = [];
 
@@ -489,7 +562,7 @@ export async function markNotificationsRead(
 export async function getStats() {
   const all = await listBookings({ includeCancelled: true });
   const now = new Date();
-  const upcoming = all.filter((b) => b.status === "confirmed" && bookingDateTime(b.day, b.hour) >= now);
+  const upcoming = all.filter((b) => (b.status === "confirmed" || b.status === "pending") && bookingDateTime(b.day, b.hour) >= now);
   const done = all.filter((b) => b.status === "done");
   const cancelled = all.filter((b) => b.status === "cancelled");
   const byService: Record<string, number> = {};

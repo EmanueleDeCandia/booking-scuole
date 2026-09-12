@@ -22,33 +22,33 @@ function NavInner() {
 
   return (
     <>
-      <header className="mx-auto flex w-full max-w-7xl items-center justify-between gap-2 px-3 py-3 sm:px-8 sm:py-5">
-        <Link href="/" className="group flex items-center gap-2 sm:gap-3 shrink-0">
-          <span className="sketch-sm grid h-9 w-9 sm:h-12 sm:w-12 place-items-center bg-crayon-red text-xl sm:text-2xl text-white transition-transform group-hover:-rotate-6">
+      <header className="mx-auto flex w-full max-w-7xl items-center justify-between gap-3 px-3 py-2.5 sm:px-6 lg:px-8 sm:py-4">
+        <Link href="/" className="group flex items-center gap-2 sm:gap-2.5 shrink-0">
+          <span className="sketch-sm grid h-9 w-9 sm:h-11 sm:w-11 place-items-center bg-crayon-red text-xl sm:text-2xl text-white transition-transform group-hover:-rotate-6">
             ✎
           </span>
           <span className="leading-none">
-            <span className="font-display block text-xl sm:text-3xl">
+            <span className="font-display block text-xl sm:text-2xl lg:text-3xl">
               Na<span className="text-crayon-red">ï</span>ve Agenda
             </span>
-            <span className="font-hand hidden sm:block text-base sm:text-lg text-ink-soft">
+            <span className="font-hand hidden md:block text-xs sm:text-sm text-ink-soft">
               scuole · corsi · prenotazioni
             </span>
           </span>
         </Link>
 
-        {/* Desktop Navigation (>= 640px) */}
-        <nav className="hidden sm:flex items-center gap-2 sm:gap-2.5 shrink-0">
+        {/* Desktop Navigation (>= 1024px) */}
+        <nav className="hidden lg:flex items-center gap-2 xl:gap-2.5 shrink-0">
           <Link
             href="/"
-            className={`btn !py-2 !px-3.5 text-base font-semibold ${is("/") ? "btn-ink" : ""}`}
+            className={`btn !py-2 !px-3 text-sm xl:text-base font-semibold ${is("/") ? "btn-ink" : ""}`}
           >
             Agenda 3D
           </Link>
 
           <Link
             href="/corsi"
-            className={`btn !py-2 !px-3 text-base font-semibold ${is("/corsi") ? "btn-ink" : ""}`}
+            className={`btn !py-2 !px-3 text-sm xl:text-base font-semibold ${is("/corsi") ? "btn-ink" : ""}`}
             title="Nuovi Corsi in Programma & Sondaggio Appeal"
           >
             🎭 Corsi
@@ -57,36 +57,28 @@ function NavInner() {
           {user ? (
             <>
               {role === "manager" ? (
-                <>
-                  <Link
-                    href="/dashboard"
-                    className={`btn !py-2 !px-3.5 text-base font-semibold ${is("/dashboard") ? "btn-ink" : ""}`}
-                  >
-                    👑 Dashboard
-                  </Link>
-                  <Link
-                    href="/profilo#gamification-manager"
-                    className="btn btn-yellow !py-2 !px-3 text-sm font-bold shadow-xs"
-                    title="Console Registro Didattico, Timbri Straordinari ed Encomi"
-                  >
-                    🏅 Gamification
-                  </Link>
-                </>
+                <Link
+                  href="/dashboard"
+                  className={`btn !py-2 !px-3 text-sm xl:text-base font-semibold ${is("/dashboard") ? "btn-ink" : ""}`}
+                >
+                  👑 Dashboard
+                </Link>
               ) : (
                 <Link
                   href="/profilo#gamification"
                   className="btn btn-yellow !py-2 !px-3 text-sm font-bold shadow-xs"
                   title="Il tuo Libretto Artistico, XP e Gradi d'Atelier"
                 >
-                  🏅 Libretto Artistico
+                  🏅 Libretto
                 </Link>
               )}
 
               <Link
                 href="/profilo"
-                className={`btn flex items-center gap-1.5 !py-2 !px-3.5 text-base font-semibold ${is("/profilo") ? "btn-ink" : ""}`}
+                className={`btn flex items-center gap-1.5 !py-2 !px-3 text-sm xl:text-base font-semibold ${is("/profilo") ? "btn-ink" : ""}`}
+                title="Visualizza e modifica il tuo profilo"
               >
-                <span className="relative h-6 w-6 sm:h-7 sm:w-7 overflow-hidden rounded-full border border-ink/30 bg-crayon-yellow/30 text-xs font-bold grid place-items-center">
+                <span className="relative h-6 w-6 overflow-hidden rounded-full border border-ink/30 bg-crayon-yellow/30 text-xs font-bold grid place-items-center shrink-0">
                   {user.avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={user.avatarUrl} alt={user.displayName} className="h-full w-full object-cover" />
@@ -94,13 +86,13 @@ function NavInner() {
                     user.displayName.charAt(0).toUpperCase()
                   )}
                 </span>
-                <span className="hidden md:inline">Il Mio Profilo</span>
+                <span className="max-w-[110px] truncate">{user.displayName || "Profilo"}</span>
               </Link>
 
               <button
                 type="button"
                 onClick={signOut}
-                className="btn !px-3 !py-1.5 text-sm text-ink-soft hover:text-crayon-red"
+                className="btn !px-2.5 !py-1.5 text-xs text-ink-soft hover:text-crayon-red"
                 title="Esci dall'account"
               >
                 Esci
@@ -109,17 +101,20 @@ function NavInner() {
           ) : !loading ? (
             <Link
               href="/auth/login"
-              className={`btn btn-yellow !py-2 !px-4 text-base font-semibold ${is("/auth") ? "btn-ink" : ""}`}
+              className={`btn btn-yellow !py-2 !px-4 text-sm xl:text-base font-semibold ${is("/auth") ? "btn-ink" : ""}`}
             >
               🔑 Accedi
             </Link>
           ) : null}
 
-          <NotificationBell />
+          {/* Campanellino Notifiche Desktop: sempre visibile, ancorato e con shrink-0 */}
+          <div className="shrink-0 ml-1">
+            <NotificationBell />
+          </div>
         </nav>
 
-        {/* Mobile Navigation Header (< 640px) */}
-        <div className="flex sm:hidden items-center gap-2 shrink-0">
+        {/* Mobile & Tablet Navigation Header (< 1024px) */}
+        <div className="flex lg:hidden items-center gap-2 shrink-0">
           <NotificationBell />
           <button
             type="button"
@@ -139,7 +134,7 @@ function NavInner() {
       {/* Mobile Drawer / Card Modal */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-50 flex flex-col justify-start bg-ink/40 p-3 pt-16 sm:hidden backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex flex-col justify-start bg-ink/40 p-3 pt-16 lg:hidden backdrop-blur-xs"
           onClick={() => setMobileOpen(false)}
         >
           <div
@@ -202,6 +197,13 @@ function NavInner() {
                     className={`btn btn-yellow w-full !py-2.5 text-sm font-bold justify-start ${is("/dashboard") ? "btn-ink" : ""}`}
                   >
                     👑 Dashboard Gestionale
+                  </Link>
+                  <Link
+                    href="/gestore/utenti"
+                    onClick={() => setMobileOpen(false)}
+                    className={`btn w-full !py-2.5 text-sm font-bold justify-start ${is("/gestore/utenti") ? "btn-ink" : "bg-white border-2 border-ink text-ink"}`}
+                  >
+                    👥 Utenti Registrati (DB)
                   </Link>
                   <Link
                     href="/profilo#gamification-manager"

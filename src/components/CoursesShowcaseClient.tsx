@@ -23,6 +23,10 @@ export function CoursesShowcaseClient() {
   const [bookingTarget, setBookingTarget] = useState<SlotTarget | null>(null);
   const [preselectedCourse, setPreselectedCourse] = useState<string | null>(null);
 
+  // Modale e stato eliminazione per il gestore
+  const [courseToDelete, setCourseToDelete] = useState<CourseDTO | null>(null);
+  const [deletingCourse, setDeletingCourse] = useState(false);
+
   useEffect(() => {
     try {
       let token = localStorage.getItem("naive_voter_token");
@@ -56,6 +60,35 @@ export function CoursesShowcaseClient() {
   useEffect(() => {
     loadCourses();
   }, [loadCourses]);
+
+  useEffect(() => {
+    const handler = () => loadCourses();
+    window.addEventListener("courses:changed", handler);
+    return () => window.removeEventListener("courses:changed", handler);
+  }, [loadCourses]);
+
+  const handleDeleteCourse = async () => {
+    if (!courseToDelete) return;
+    setDeletingCourse(true);
+    try {
+      const res = await fetch(`/api/courses?id=${courseToDelete.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Errore eliminazione corso");
+      }
+      toast.show(`🗑️ Corso "${courseToDelete.title}" eliminato con successo!`, "info");
+      setCourseToDelete(null);
+      await loadCourses();
+      window.dispatchEvent(new Event("courses:changed"));
+    } catch (err: any) {
+      console.error(err);
+      toast.show(err.message || "Impossibile eliminare il corso", "error");
+    } finally {
+      setDeletingCourse(false);
+    }
+  };
 
   const handleVoteAppeal = async (courseId: number, rating: number) => {
     setVotingCourseId(courseId);
@@ -229,10 +262,23 @@ export function CoursesShowcaseClient() {
                         {course.description || "Nessuna descrizione disponibile per questa proposta."}
                       </p>
 
-                      <div className="mt-4 flex flex-wrap items-center gap-4 text-xs font-semibold text-ink-soft border-t border-dashed border-ink/15 pt-3">
-                        <span>👤 Docente: <strong className="text-ink">{course.instructor}</strong></span>
-                        <span>👥 Max {course.maxCapacity} allievi</span>
-                        <span>💶 Quota: <strong className="text-ink">€{course.price}</strong></span>
+                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-ink-soft border-t border-dashed border-ink/15 pt-3">
+                        <div className="flex flex-wrap items-center gap-4">
+                          <span>👤 Docente: <strong className="text-ink">{course.instructor}</strong></span>
+                          <span>👥 Max {course.maxCapacity} allievi</span>
+                          <span>💶 Quota: <strong className="text-ink">€{course.price}</strong></span>
+                        </div>
+                        {user?.role === "manager" && (
+                          <button
+                            type="button"
+                            onClick={() => setCourseToDelete(course)}
+                            className="inline-flex items-center gap-1 text-xs font-bold text-crayon-red hover:text-white hover:bg-crayon-red py-1 px-2.5 rounded border border-crayon-red/40 transition-colors shadow-xs"
+                            title={`Elimina proposta "${course.title}"`}
+                          >
+                            <span>🗑️</span>
+                            <span>Elimina Proposta</span>
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -319,8 +365,20 @@ export function CoursesShowcaseClient() {
                 </div>
               </div>
 
-              <div className="mt-5 pt-3 border-t border-dashed border-ink/20 flex items-center justify-between">
-                <span className="text-[11px] text-ink-soft">Disponibile in Agenda 3D</span>
+              <div className="mt-5 pt-3 border-t border-dashed border-ink/20 flex items-center justify-between gap-2">
+                {user?.role === "manager" ? (
+                  <button
+                    type="button"
+                    onClick={() => setCourseToDelete(course)}
+                    className="inline-flex items-center gap-1 text-xs font-bold text-crayon-red hover:text-white hover:bg-crayon-red py-1 px-2.5 rounded border border-crayon-red/40 transition-colors shadow-xs"
+                    title={`Elimina corso "${course.title}"`}
+                  >
+                    <span>🗑️</span>
+                    <span>Elimina Corso</span>
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-ink-soft">Disponibile in Agenda 3D</span>
+                )}
                 <button
                   type="button"
                   onClick={() => handleBookCourse(course.title)}
@@ -346,6 +404,117 @@ export function CoursesShowcaseClient() {
           onUpdated={() => setBookingTarget(null)}
           onDeleted={() => setBookingTarget(null)}
         />
+      )}
+
+      {/* MODALE CONFERMA ELIMINAZIONE CORSO PER IL GESTORE */}
+      {courseToDelete && (
+        <div
+          className="fixed inset-0 z-[110] grid place-items-center bg-ink/50 p-4 backdrop-blur-[2px]"
+          onClick={() => !deletingCourse && setCourseToDelete(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="sketch wobble-in relative w-full max-w-md bg-[#fffdf5] p-5 sm:p-6"
+            style={{ transform: "rotate(-0.3deg)" }}
+          >
+            <div
+              className="absolute -top-3 left-1/2 h-6 w-28 -translate-x-1/2 rotate-[-2deg] bg-crayon-red/80"
+              style={{ clipPath: "polygon(2% 0, 100% 4%, 98% 100%, 0 96%)" }}
+            />
+
+            <div className="flex items-start justify-between border-b-2 border-dashed border-ink/20 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <h3 className="font-display text-lg uppercase font-bold text-crayon-red">
+                    Conferma Eliminazione
+                  </h3>
+                  <p className="text-xs text-ink-soft">
+                    Verifica prima di rimuovere il corso
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={deletingCourse}
+                onClick={() => setCourseToDelete(null)}
+                className="btn !px-2.5 !py-0.5 text-sm"
+                title="Chiudi"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div
+                className="rounded-lg border-2 border-ink/20 bg-white p-3.5 shadow-xs"
+                style={{ borderLeft: `6px solid ${courseToDelete.color || "#e8542f"}` }}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="tag bg-crayon-yellow/40 text-ink text-[10px] font-bold uppercase !py-0 !px-1.5">
+                    {courseToDelete.category}
+                  </span>
+                  <span
+                    className={`tag text-[10px] font-bold uppercase !py-0 !px-1.5 ${
+                      courseToDelete.status === "active"
+                        ? "bg-crayon-teal text-white"
+                        : "bg-crayon-red/20 text-crayon-red"
+                    }`}
+                  >
+                    {courseToDelete.status === "active" ? "Corso Attivo" : "In Programma (Sondaggio)"}
+                  </span>
+                </div>
+                <h4 className="font-display text-base uppercase font-bold text-ink mt-1.5">
+                  {courseToDelete.title}
+                </h4>
+                <div className="text-xs text-ink-soft mt-1">
+                  Docente: <strong>{courseToDelete.instructor}</strong> · Capienza: {courseToDelete.maxCapacity} allievi
+                  {courseToDelete.price ? ` · € ${courseToDelete.price}/mese` : ""}
+                </div>
+              </div>
+
+              <div className="rounded-md bg-crayon-red/10 border border-crayon-red/30 p-3 text-xs text-ink space-y-1">
+                <p className="font-bold text-crayon-red flex items-center gap-1">
+                  <span>🛑</span>
+                  <span>Attenzione: azione non reversibile!</span>
+                </p>
+                <p className="text-ink-soft leading-relaxed">
+                  Eliminando questo corso verrà rimosso dal catalogo della scuola, dall&apos;agenda didattica
+                  e verranno cancellati anche tutti i voti di appeal associati.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 pt-3 border-t-2 border-dashed border-ink/20 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={deletingCourse}
+                onClick={() => setCourseToDelete(null)}
+                className="btn btn-ink-soft !py-2 !px-4 text-xs font-bold"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                disabled={deletingCourse}
+                onClick={handleDeleteCourse}
+                className="btn btn-red !py-2 !px-4 text-xs font-bold flex items-center gap-1.5 shadow-sm"
+              >
+                {deletingCourse ? (
+                  <>
+                    <span className="animate-spin text-sm">⏳</span>
+                    <span>Eliminazione in corso…</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🗑️</span>
+                    <span>Sì, Elimina Definitivamente</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -24,6 +24,7 @@ interface NotificationContextType {
   perm: NotificationPermission | "unsupported";
   askPermission: () => Promise<void>;
   markAll: () => Promise<void>;
+  clearAll: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | null>(null);
@@ -105,6 +106,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setItems((prev) => prev.map((i) => ({ ...i, read: true })));
   };
 
+  const clearAll = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (role) params.set("role", role);
+      if (user?.id) params.set("userId", user.id);
+      if (user?.email) params.set("email", user.email);
+      const queryStr = params.toString() ? `?${params.toString()}` : "";
+      await fetch(`/api/notifications${queryStr}`, { method: "DELETE" });
+      setItems([]);
+      setUnread(0);
+      toast.push({ title: "Notifiche svuotate", message: "Le notifiche sono state rimosse.", tone: "teal" });
+    } catch {}
+  };
+
   const askPermission = async () => {
     if (typeof Notification === "undefined") return;
     const p = await Notification.requestPermission();
@@ -128,6 +143,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         perm,
         askPermission,
         markAll,
+        clearAll,
       }}
     >
       {children}
@@ -155,7 +171,7 @@ export function NotificationBell() {
     <button
       type="button"
       onClick={() => setOpen((prev) => !prev)}
-      className={`btn relative !px-2.5 !py-1.5 sm:!px-3 sm:!py-2 transition-all ${
+      className={`btn relative shrink-0 !px-2.5 !py-1.5 sm:!px-3 sm:!py-2 transition-all ${
         open ? "btn-ink border-2 border-ink" : ""
       }`}
       aria-label={role === "manager" ? "Notifiche scuola" : "I tuoi promemoria"}
@@ -176,7 +192,7 @@ export function NotificationBell() {
  * spingendo verso il basso il resto della pagina in modo simmetrico e pulito.
  */
 export function NotificationPanel() {
-  const { items, unread, open, setOpen, perm, askPermission, markAll } = useNotifications();
+  const { items, unread, open, setOpen, perm, askPermission, markAll, clearAll } = useNotifications();
   const { role } = useAuth();
   const isManager = role === "manager";
 
@@ -197,9 +213,9 @@ export function NotificationPanel() {
               </div>
               <div className="font-hand text-sm sm:text-base text-ink-soft">
                 {isManager ? (
-                  "Avvisi e promemoria delle prenotazioni degli allievi"
+                  "Avvisi e promemoria delle prenotazioni degli allievi (ultime 20)"
                 ) : (
-                  "visualizza gli aggiornamenti ai tuoi corsi e prenotazioni!."
+                  "Visualizza gli aggiornamenti ai tuoi corsi e prenotazioni (ultime 20)."
                 )}
                 {unread > 0 && (
                   <span className="ml-2 inline-block font-bold text-crayon-red">
@@ -228,6 +244,16 @@ export function NotificationPanel() {
                 className="tag !text-xs !py-1 !px-2.5 bg-white hover:scale-105 border border-ink/30 font-semibold cursor-pointer"
               >
                 Segna tutte lette
+              </button>
+            )}
+            {items.length > 0 && (
+              <button
+                type="button"
+                onClick={clearAll}
+                className="tag !text-xs !py-1 !px-2.5 bg-white hover:bg-crayon-red/10 text-ink-soft hover:text-crayon-red border border-ink/30 font-semibold cursor-pointer"
+                title="Cancella tutte le notifiche"
+              >
+                🗑️ Svuota
               </button>
             )}
             <button

@@ -6,6 +6,9 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
+  query,
+  where,
 } from "./firestore";
 
 export type CourseDTO = {
@@ -60,8 +63,15 @@ export async function ensureCoursesSeed() {
 
   gCourses.__coursesSeeded = (async () => {
     try {
+      const metaRef = doc(firestore, "courses", "_meta_init");
+      const metaSnap = await getDoc(metaRef);
+      if (metaSnap.exists()) {
+        return;
+      }
+
       const snap = await getDocs(collection(firestore, "courses"));
-      if (snap.size === 0) {
+      const validDocs = snap.docs.filter((d) => !d.id.startsWith("_meta"));
+      if (validDocs.length === 0) {
         const initial = [
           {
             id: 1,
@@ -144,6 +154,8 @@ export async function ensureCoursesSeed() {
           await setDoc(doc(firestore, "courses", String(c.id)), c);
         }
       }
+
+      await setDoc(metaRef, { initialized: true, at: new Date().toISOString() });
     } catch (e) {
       console.warn("Courses seed note:", e);
     }
@@ -157,6 +169,7 @@ export async function listCourses(status?: "active" | "upcoming"): Promise<Cours
   const snap = await getDocs(collection(firestore, "courses"));
   let list: CourseDTO[] = [];
   snap.forEach((docSnap) => {
+    if (docSnap.id.startsWith("_meta")) return;
     const data = docSnap.data();
     list.push(toCourseDTO({ id: docSnap.id, ...data }));
   });
@@ -167,6 +180,31 @@ export async function listCourses(status?: "active" | "upcoming"): Promise<Cours
 
   list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   return list;
+}
+
+export async function deleteCourse(courseId: number): Promise<boolean> {
+  await ensureCoursesSeed();
+  const docRef = doc(firestore, "courses", String(courseId));
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) {
+    throw new Error("CORSO_NON_TROVATO");
+  }
+
+  await deleteDoc(docRef);
+
+  // Rimuove eventuali voti registrati per questo corso
+  try {
+    const votesSnap = await getDocs(
+      query(collection(firestore, "course_votes"), where("courseId", "==", courseId))
+    );
+    for (const vDoc of votesSnap.docs) {
+      await deleteDoc(vDoc.ref);
+    }
+  } catch (err) {
+    console.warn("Note: could not delete related course_votes:", err);
+  }
+
+  return true;
 }
 
 export async function createCourse(input: {
@@ -183,6 +221,7 @@ export async function createCourse(input: {
   const snap = await getDocs(collection(firestore, "courses"));
   let maxId = 0;
   snap.forEach((docSnap) => {
+    if (docSnap.id.startsWith("_meta")) return;
     const d = docSnap.data();
     const numericId = Number(d.id || docSnap.id);
     if (!isNaN(numericId) && numericId > maxId) {

@@ -4,6 +4,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "./auth/AuthContext";
 import { useToast } from "./Toasts";
+import { auth } from "@/lib/firebase";
+import { updateProfile as fbUpdateProfile } from "firebase/auth";
 import {
   formatDayLong,
   formatHour,
@@ -38,7 +40,7 @@ export function ProfileClient() {
 }
 
 function StudentProfileClient() {
-  const { user, refreshProfile, signOut, loading: authLoading } = useAuth();
+  const { user, refreshProfile, updateCurrentUser, signOut, loading: authLoading } = useAuth();
   const toast = useToast();
 
   const [profileData, setProfileData] = useState<{
@@ -122,18 +124,30 @@ function StudentProfileClient() {
     e.preventDefault();
     if (!user) return;
     try {
+      if (auth?.currentUser && displayName.trim()) {
+        try {
+          await fbUpdateProfile(auth.currentUser, { displayName: displayName.trim() });
+        } catch (fbErr) {
+          console.warn("Could not update Firebase displayName:", fbErr);
+        }
+      }
+
       const res = await fetch("/api/profile", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId: user.id,
-          displayName,
-          phone,
-          notes,
+          displayName: displayName.trim(),
+          phone: phone.trim(),
+          notes: notes.trim(),
         }),
       });
       if (!res.ok) throw new Error("Errore aggiornamento");
-      toast.show("Dati del profilo salvati!", "info");
+      const resData = await res.json();
+      if (resData.user) {
+        updateCurrentUser(resData.user);
+      }
+      toast.show("Dati del profilo salvati con successo! 💾", "info");
       setIsEditing(false);
       await refreshProfile();
       await loadData();
@@ -223,9 +237,19 @@ function StudentProfileClient() {
     );
   }
 
+  const todayStr = toISODate(new Date());
+  const curHour = new Date().getHours();
   const bookings = profileData?.bookings || [];
-  const upcomingBookings = bookings.filter((b) => b.status === "confirmed");
-  const pastBookings = bookings.filter((b) => b.status !== "confirmed" || new Date(b.day) < new Date());
+
+  const isUpcoming = (b: BookingDTO) => {
+    if (b.status === "cancelled") return false;
+    if (b.day > todayStr) return true;
+    if (b.day === todayStr && b.hour >= curHour) return true;
+    return false;
+  };
+
+  const upcomingBookings = bookings.filter(isUpcoming);
+  const pastBookings = bookings.filter((b) => !isUpcoming(b));
   const stats = profileData?.stats || { total: 0, present: 0, absent: 0, upcoming: 0, cancelled: 0 };
 
   return (
@@ -439,7 +463,7 @@ function StudentProfileClient() {
               onClick={() => setActiveTab("upcoming")}
               className={`btn text-xs font-bold ${activeTab === "upcoming" ? "btn-ink" : ""}`}
             >
-              📅 Corsi in Programma ({upcomingBookings.length})
+              📅 Lezioni Prenotate ({upcomingBookings.length})
             </button>
             <button
               type="button"
@@ -458,13 +482,13 @@ function StudentProfileClient() {
           </button>
         </div>
 
-        {/* Tab 1: Corsi in Programma */}
+        {/* Tab 1: Lezioni Prenotate */}
         {activeTab === "upcoming" && (
           <div className="mt-4 space-y-3">
             {upcomingBookings.length === 0 ? (
               <div className="card-sketch bg-white/80 p-8 text-center">
                 <p className="font-hand text-xl text-ink-soft">
-                  Non hai ancora corsi in programma!
+                  Non hai ancora lezioni prenotate nei prossimi giorni!
                 </p>
                 <button
                   type="button"
@@ -484,14 +508,6 @@ function StudentProfileClient() {
                   notes: b.notes,
                   clientEmail: b.clientEmail,
                 });
-                const waUrl = makeWhatsAppUrl({
-                  phone: b.clientPhone,
-                  clientName: b.clientName,
-                  day: b.day,
-                  hour: b.hour,
-                  service: b.service,
-                  mode: "confirm",
-                });
 
                 return (
                   <div
@@ -508,8 +524,8 @@ function StudentProfileClient() {
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="font-display text-lg text-ink">{b.service}</span>
-                          <span className="tag bg-crayon-green text-white text-[10px] font-bold">
-                            Confermato
+                          <span className={`tag text-white text-[10px] font-bold ${b.status === "confirmed" ? "bg-crayon-green" : "bg-crayon-yellow"}`}>
+                            {b.status === "confirmed" ? "Confermato" : "In attesa"}
                           </span>
                         </div>
                         <div className="font-hand text-lg text-crayon-red">

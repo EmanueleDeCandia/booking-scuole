@@ -31,10 +31,10 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await signIn(email, password);
+      const loggedUser = await signIn(email, password);
       toast.show("Accesso effettuato con successo!", "info");
-      // Se l'email contiene gestore/admin o il ruolo è manager, va a dashboard, altrimenti a profilo
-      if (email.includes("gestore") || email.includes("admin")) {
+      // Se l'utente ha ruolo manager o l'email è da gestore/admin, va a dashboard, altrimenti a profilo
+      if (loggedUser?.role === "manager" || role === "manager" || email.includes("gestore") || email.includes("admin")) {
         router.push("/dashboard");
       } else {
         router.push("/profilo");

@@ -128,9 +128,28 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
     [toast],
   );
 
+  const [weekFilter, setWeekFilter] = useState<"upcoming" | "past" | "all">("upcoming");
+  const todayStr = toISODate(new Date());
+  const curHour = new Date().getHours();
+
   const days = weekDays(monday);
   const weekBookings = getWeekBookings(monday);
   const freeSlots = 7 * 11 - weekBookings.length;
+
+  const isPastSlot = (b: BookingDTO) => {
+    if (b.day < todayStr) return true;
+    if (b.day === todayStr && b.hour <= curHour) return true;
+    return false;
+  };
+
+  const upcomingCount = weekBookings.filter((b) => !isPastSlot(b)).length;
+  const pastCount = weekBookings.filter((b) => isPastSlot(b)).length;
+
+  const filteredWeekBookings = weekBookings.filter((b) => {
+    if (weekFilter === "upcoming") return !isPastSlot(b);
+    if (weekFilter === "past") return isPastSlot(b);
+    return true;
+  });
 
   return (
     <div className="mx-auto w-full max-w-7xl px-3 sm:px-8 pb-12">
@@ -265,12 +284,46 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
       {/* legenda + prossimi */}
       <div className="mt-6 grid gap-4 sm:gap-5 md:grid-cols-3">
         <div className="sketch p-3.5 sm:p-5 md:col-span-2">
-          <div className="font-display scribble-under inline-block text-base sm:text-lg uppercase">Questa settimana</div>
-          {weekBookings.length === 0 ? (
-            <p className="font-hand mt-3 text-xl sm:text-2xl text-ink-soft">Nessun appuntamento: la pagina è tutta tua ✎</p>
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/15 pb-2">
+            <div className="font-display scribble-under inline-block text-base sm:text-lg uppercase">Questa settimana</div>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setWeekFilter("upcoming")}
+                className={`btn text-xs font-bold !py-1 !px-2.5 ${weekFilter === "upcoming" ? "btn-ink" : ""}`}
+                title="Visualizza solo le lezioni e gli slot futuri"
+              >
+                ⚡ Prossimi ({upcomingCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeekFilter("past")}
+                className={`btn text-xs font-bold !py-1 !px-2.5 ${weekFilter === "past" ? "btn-ink" : ""}`}
+                title="Visualizza gli appuntamenti passati di questa settimana"
+              >
+                ⌛ Passati ({pastCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setWeekFilter("all")}
+                className={`btn text-xs font-bold !py-1 !px-2.5 ${weekFilter === "all" ? "btn-ink" : ""}`}
+                title="Visualizza tutti gli slot di questa settimana"
+              >
+                Tutti ({weekBookings.length})
+              </button>
+            </div>
+          </div>
+          {filteredWeekBookings.length === 0 ? (
+            <p className="font-hand mt-3 text-xl sm:text-2xl text-ink-soft">
+              {weekFilter === "upcoming"
+                ? "Nessun appuntamento futuro in questa settimana: gli slot sono liberi ✎"
+                : weekFilter === "past"
+                ? "Nessun appuntamento passato per questa settimana."
+                : "Nessun appuntamento: la pagina è tutta tua ✎"}
+            </p>
           ) : (
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-              {weekBookings
+              {filteredWeekBookings
                 .slice()
                 .sort((a, b) => (a.day + a.hour).localeCompare(b.day + b.hour) || a.hour - b.hour)
                 .map((b) => {

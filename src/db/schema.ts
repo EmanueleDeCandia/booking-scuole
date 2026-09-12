@@ -46,9 +46,9 @@ export const bookings = pgTable(
     clientName: text("client_name").notNull(),
     clientEmail: text("client_email"),
     clientPhone: text("client_phone"),
-    service: text("service").notNull().default("Consulenza"),
+    service: text("service").notNull().default("Formazione"),
     notes: text("notes"),
-    status: text("status").notNull().default("confirmed"), // confirmed | cancelled | done
+    status: text("status").notNull().default("pending"), // pending | confirmed | cancelled | done
     attendanceStatus: text("attendance_status").notNull().default("pending"), // pending | present | absent
     reminderMinutes: integer("reminder_minutes").notNull().default(60),
     reminderSent: boolean("reminder_sent").notNull().default(false),

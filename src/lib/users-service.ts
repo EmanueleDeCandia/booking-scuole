@@ -6,12 +6,15 @@ import {
   getDocs,
   setDoc,
   updateDoc,
+  deleteDoc,
 } from "./firestore";
 import {
   calculateGamificationLevel,
   type GamificationProfile,
   type StudentBadge,
   type UserDTO,
+  type UserWithStatsDTO,
+  type DeletedUserDTO,
 } from "./agenda";
 
 export function toUserDTO(u: any): UserDTO {
@@ -152,12 +155,17 @@ export async function upsertUser(input: {
   if (existing) {
     const targetId = existing.id;
     const docRef = doc(firestore, "users", targetId);
+
+    // Se l'utente ha già un nome personalizzato salvato, non sovrascriverlo con il fallback dell'email
+    const hasCustomName = Boolean(existing.displayName && existing.displayName.trim() && !existing.displayName.includes("@"));
+    const finalDisplayName = hasCustomName ? existing.displayName : (input.displayName || existing.displayName);
+
     const patchData: Record<string, any> = {
-      displayName: input.displayName || existing.displayName,
-      phone: input.phone !== undefined ? input.phone : existing.phone,
-      avatarUrl: input.avatarUrl !== undefined ? input.avatarUrl : existing.avatarUrl,
-      notes: input.notes !== undefined ? input.notes : existing.notes,
-      role: input.role || existing.role,
+      displayName: finalDisplayName,
+      phone: input.phone || existing.phone || null,
+      avatarUrl: input.avatarUrl || existing.avatarUrl || null,
+      notes: input.notes !== undefined && input.notes !== null ? input.notes : existing.notes,
+      role: existing.role || input.role || "user",
       updatedAt: new Date().toISOString(),
     };
     await updateDoc(docRef, patchData);
@@ -170,7 +178,7 @@ export async function upsertUser(input: {
   const newUser = {
     id: newId,
     email,
-    displayName: input.displayName,
+    displayName: input.displayName || email.split("@")[0],
     phone: input.phone ?? null,
     avatarUrl: input.avatarUrl ?? null,
     role,
@@ -196,17 +204,25 @@ export async function updateUser(
   }>
 ): Promise<UserDTO> {
   await ensureUsersSeed();
-  const docRef = doc(firestore, "users", id);
-  const snap = await getDoc(docRef);
-  if (!snap.exists()) throw new Error("USER_NOT_FOUND");
+  const existing = await getUserById(id);
+  if (!existing) throw new Error("USER_NOT_FOUND");
 
-  await updateDoc(docRef, {
-    ...patch,
+  const docRef = doc(firestore, "users", existing.id);
+
+  const cleanPatch: Record<string, any> = {
     updatedAt: new Date().toISOString(),
-  });
+  };
+  if (patch.displayName !== undefined) cleanPatch.displayName = patch.displayName.trim();
+  if (patch.phone !== undefined) cleanPatch.phone = patch.phone ? patch.phone.trim() : null;
+  if (patch.avatarUrl !== undefined) cleanPatch.avatarUrl = patch.avatarUrl;
+  if (patch.notes !== undefined) cleanPatch.notes = patch.notes ? patch.notes.trim() : null;
+  if (patch.role !== undefined) cleanPatch.role = patch.role;
+  if (patch.status !== undefined) cleanPatch.status = patch.status;
+
+  await updateDoc(docRef, cleanPatch);
 
   const updatedSnap = await getDoc(docRef);
-  return toUserDTO({ id, ...updatedSnap.data() });
+  return toUserDTO({ id: existing.id, ...updatedSnap.data() });
 }
 
 export async function getUserProfileData(userId: string) {
@@ -221,10 +237,10 @@ export async function getUserProfileData(userId: string) {
 
   bookingsSnap.forEach((d) => {
     const b = d.data();
+    const userEmail = user.email.toLowerCase().trim();
     const matchesUser =
-      user.role === "manager" ||
-      b.userId === user.id ||
-      (b.clientEmail && b.clientEmail.toLowerCase() === user.email.toLowerCase());
+      (b.userId && b.userId === user.id) ||
+      (b.clientEmail && String(b.clientEmail).toLowerCase().trim() === userEmail);
 
     if (matchesUser) {
       userBookings.push({
@@ -237,7 +253,7 @@ export async function getUserProfileData(userId: string) {
         clientPhone: b.clientPhone,
         service: b.service,
         notes: b.notes,
-        status: b.status || "confirmed",
+        status: b.status || "pending",
         attendanceStatus: b.attendanceStatus || "pending",
         reminderMinutes: Number(b.reminderMinutes || 60),
         reminderSent: Boolean(b.reminderSent),
@@ -251,15 +267,16 @@ export async function getUserProfileData(userId: string) {
     return b.hour - a.hour;
   });
 
+  const todayStr = new Date().toISOString().slice(0, 10);
   const total = userBookings.length;
   const present = userBookings.filter((b) => b.attendanceStatus === "present" || b.status === "done").length;
   const absent = userBookings.filter((b) => b.attendanceStatus === "absent").length;
-  const upcoming = userBookings.filter((b) => b.status === "confirmed").length;
+  const upcoming = userBookings.filter((b) => b.status !== "cancelled" && b.day >= todayStr).length;
   const cancelled = userBookings.filter((b) => b.status === "cancelled").length;
 
-    return {
-      user,
-      stats: {
+  return {
+    user,
+    stats: {
         total,
         present,
         absent,
@@ -446,3 +463,182 @@ export async function listStudentsGamification(): Promise<UserDTO[]> {
   students.sort((a, b) => (b.gamification?.danceXp || 0) - (a.gamification?.danceXp || 0));
   return students;
 }
+
+export async function listAllUsersWithStats(): Promise<UserWithStatsDTO[]> {
+  await ensureUsersSeed();
+  const [usersSnap, bookingsSnap] = await Promise.all([
+    getDocs(collection(firestore, "users")),
+    getDocs(collection(firestore, "bookings")),
+  ]);
+
+  const bookingsByUser = new Map<string, { total: number; upcoming: number }>();
+  const now = new Date().toISOString();
+  const todayStr = now.split("T")[0];
+
+  bookingsSnap.forEach((d) => {
+    const b = d.data();
+    if (b.status === "cancelled") return;
+    const emailKey = b.clientEmail ? String(b.clientEmail).toLowerCase().trim() : null;
+    const userIdKey = b.userId || null;
+    const isUpcoming = b.day >= todayStr;
+
+    const recordKey = (key: string) => {
+      const cur = bookingsByUser.get(key) || { total: 0, upcoming: 0 };
+      cur.total += 1;
+      if (isUpcoming) cur.upcoming += 1;
+      bookingsByUser.set(key, cur);
+    };
+
+    if (userIdKey) recordKey(userIdKey);
+    if (emailKey) recordKey(emailKey);
+  });
+
+  const users: UserWithStatsDTO[] = [];
+  usersSnap.forEach((d) => {
+    const u = toUserDTO({ id: d.id, ...d.data() });
+    const statsId = bookingsByUser.get(u.id);
+    const statsEmail = bookingsByUser.get(u.email.toLowerCase().trim());
+    const total = Math.max(statsId?.total || 0, statsEmail?.total || 0);
+    const upcoming = Math.max(statsId?.upcoming || 0, statsEmail?.upcoming || 0);
+    users.push({
+      ...u,
+      bookingsCount: total,
+      upcomingBookingsCount: upcoming,
+    });
+  });
+
+  return users.sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+}
+
+export async function listDeletedUsers(): Promise<DeletedUserDTO[]> {
+  const snap = await getDocs(collection(firestore, "deleted_users"));
+  const list: DeletedUserDTO[] = [];
+  snap.forEach((d) => {
+    const data = d.data();
+    list.push({
+      id: d.id,
+      originalId: data.originalId || d.id,
+      email: data.email || "",
+      displayName: data.displayName || "",
+      phone: data.phone || null,
+      role: data.role || "user",
+      notes: data.notes || null,
+      deletedAt: data.deletedAt || new Date().toISOString(),
+      deletedBy: data.deletedBy || "Gestore",
+      reason: data.reason || "Eliminato dal Gestore",
+      userData: data.userData,
+    });
+  });
+  return list.sort((a, b) => (b.deletedAt || "").localeCompare(a.deletedAt || ""));
+}
+
+export async function archiveAndDeleteUser(
+  userId: string,
+  options?: { purgeBookings?: boolean; deletedBy?: string; reason?: string }
+): Promise<{ ok: boolean; archivedUser: DeletedUserDTO; purgedBookingsCount: number }> {
+  await ensureUsersSeed();
+  const existing = await getUserById(userId);
+  if (!existing) {
+    throw new Error("USER_NOT_FOUND");
+  }
+
+  // Protezione account gestore principale
+  if (existing.email.toLowerCase().trim() === "gestore@scuola.it") {
+    throw new Error("CANNOT_DELETE_ROOT_MANAGER");
+  }
+
+  // 1. Archiviazione nella collezione 'deleted_users' di Firestore
+  const archiveDocId = `del_${existing.id}_${Date.now()}`;
+  const archivedUser: DeletedUserDTO = {
+    id: archiveDocId,
+    originalId: existing.id,
+    email: existing.email,
+    displayName: existing.displayName,
+    phone: existing.phone || null,
+    role: existing.role,
+    notes: existing.notes || null,
+    deletedAt: new Date().toISOString(),
+    deletedBy: options?.deletedBy || "Gestore",
+    reason: options?.reason || "Account Fake o Test rimosso dal database",
+    userData: existing,
+  };
+
+  await setDoc(doc(firestore, "deleted_users", archiveDocId), archivedUser);
+
+  // 2. Rimozione fisica dalla collezione 'users'
+  await deleteDoc(doc(firestore, "users", existing.id));
+
+  // 3. Opzionale: pulizia o cancellazione delle prenotazioni collegate
+  let purgedBookingsCount = 0;
+  if (options?.purgeBookings) {
+    const bookingsSnap = await getDocs(collection(firestore, "bookings"));
+    const userEmail = existing.email.toLowerCase().trim();
+    const userName = existing.displayName ? existing.displayName.toLowerCase().trim() : "";
+
+    for (const bDoc of bookingsSnap.docs) {
+      const bData = bDoc.data();
+      const emailMatch = bData.clientEmail && String(bData.clientEmail).toLowerCase().trim() === userEmail;
+      const nameMatch = userName && bData.clientName && String(bData.clientName).toLowerCase().trim() === userName;
+      const match = bData.userId === existing.id || emailMatch || nameMatch;
+
+      if (match) {
+        await deleteDoc(doc(firestore, "bookings", bDoc.id));
+        purgedBookingsCount++;
+      }
+    }
+
+    // Pulizia notifiche collegate
+    const notifSnap = await getDocs(collection(firestore, "notifications"));
+    for (const nDoc of notifSnap.docs) {
+      const nData = nDoc.data();
+      const emailMatch = nData.clientEmail && String(nData.clientEmail).toLowerCase().trim() === userEmail;
+      const match = nData.userId === existing.id || emailMatch;
+      if (match) {
+        await deleteDoc(doc(firestore, "notifications", nDoc.id));
+      }
+    }
+
+    // Pulizia voti corsi espressi dall'utente
+    try {
+      const votesSnap = await getDocs(collection(firestore, "course_votes"));
+      for (const vDoc of votesSnap.docs) {
+        const vData = vDoc.data();
+        if (vData.userId === existing.id || vDoc.id.includes(existing.id)) {
+          await deleteDoc(doc(firestore, "course_votes", vDoc.id));
+        }
+      }
+    } catch {
+      /* ignore if collection not present */
+    }
+  }
+
+  return { ok: true, archivedUser, purgedBookingsCount };
+}
+
+export async function restoreDeletedUser(deletedDocId: string): Promise<UserDTO> {
+  const delDocRef = doc(firestore, "deleted_users", deletedDocId);
+  const snap = await getDoc(delDocRef);
+  if (!snap.exists()) {
+    throw new Error("DELETED_USER_NOT_FOUND");
+  }
+  const data = snap.data();
+  const original = data.userData || {
+    id: data.originalId,
+    email: data.email,
+    displayName: data.displayName,
+    phone: data.phone,
+    role: data.role,
+    notes: data.notes,
+    status: "active",
+    createdAt: new Date().toISOString(),
+  };
+
+  // Re-inserisci nella collezione users attiva
+  await setDoc(doc(firestore, "users", original.id), original);
+
+  // Rimuovi dall'archivio deleted_users
+  await deleteDoc(delDocRef);
+
+  return toUserDTO({ id: original.id, ...original });
+}
+

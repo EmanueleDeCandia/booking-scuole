@@ -13,11 +13,12 @@ import {
   type NotificationDTO,
 } from "@/lib/agenda";
 import { BookingModal, type SlotTarget } from "./BookingModal";
+import { RegisteredUsersModal } from "./RegisteredUsersModal";
 import { useToast } from "./Toasts";
 
 import { useAuth } from "./auth/AuthContext";
 
-type Filter = "upcoming" | "today" | "done" | "cancelled" | "all";
+type Filter = "upcoming" | "pending" | "today" | "done" | "cancelled" | "all";
 
 export function DashboardClient({
   initialBookings,
@@ -33,6 +34,7 @@ export function DashboardClient({
   const [filter, setFilter] = useState<Filter>("upcoming");
   const [q, setQ] = useState("");
   const [target, setTarget] = useState<SlotTarget | null>(null);
+  const [showUsersModal, setShowUsersModal] = useState(false);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -49,6 +51,12 @@ export function DashboardClient({
     setNotifs(n.items);
     window.dispatchEvent(new Event("bookings:changed"));
   }, []);
+
+  useEffect(() => {
+    const handler = () => reload();
+    window.addEventListener("users:changed", handler);
+    return () => window.removeEventListener("users:changed", handler);
+  }, [reload]);
 
   const markAttendance = async (b: BookingDTO, attendanceStatus: "present" | "absent") => {
     if (b.status === "cancelled") return;
@@ -75,21 +83,33 @@ export function DashboardClient({
   }, []);
 
   const stats = useMemo(() => {
-    const upcoming = bookings.filter((b) => b.status === "confirmed" && bookingDateTime(b.day, b.hour) >= now);
+    const upcoming = bookings.filter((b) => (b.status === "confirmed" || b.status === "pending") && bookingDateTime(b.day, b.hour) >= now);
+    const pending = bookings.filter((b) => b.status === "pending" && bookingDateTime(b.day, b.hour) >= now);
     const today = bookings.filter((b) => b.day === todayISO && b.status !== "cancelled");
     const done = bookings.filter((b) => b.status === "done");
     const cancelled = bookings.filter((b) => b.status === "cancelled");
-    const byService = SERVICES.map((s) => ({
-      ...s,
-      n: bookings.filter((b) => b.service === s.id && b.status !== "cancelled").length,
-    }));
+    const byService = SERVICES.map((s) => {
+      const isMatch = (svc: string) => {
+        if (!svc) return false;
+        if (svc === s.id || svc === s.label) return true;
+        if (s.id === "Formazione" && svc === "Consulenza") return true;
+        if (s.id === "Backstage" && (svc === "Taglio" || svc === "Taglio & Piega")) return true;
+        if (s.id === "Concorso" && svc === "Visita") return true;
+        return false;
+      };
+      return {
+        ...s,
+        n: bookings.filter((b) => isMatch(b.service) && b.status !== "cancelled").length,
+      };
+    });
     const max = Math.max(1, ...byService.map((s) => s.n));
-    return { upcoming, today, done, cancelled, byService, max, next: upcoming[0] ?? null };
+    return { upcoming, pending, today, done, cancelled, byService, max, next: upcoming[0] ?? null };
   }, [bookings, now, todayISO]);
 
   const list = useMemo(() => {
     let l = bookings.slice();
-    if (filter === "upcoming") l = l.filter((b) => b.status === "confirmed" && bookingDateTime(b.day, b.hour) >= now);
+    if (filter === "upcoming") l = l.filter((b) => (b.status === "confirmed" || b.status === "pending") && bookingDateTime(b.day, b.hour) >= now);
+    if (filter === "pending") l = l.filter((b) => b.status === "pending" && bookingDateTime(b.day, b.hour) >= now);
     if (filter === "today") l = l.filter((b) => b.day === todayISO && b.status !== "cancelled");
     if (filter === "done") l = l.filter((b) => b.status === "done");
     if (filter === "cancelled") l = l.filter((b) => b.status === "cancelled");
@@ -165,6 +185,9 @@ export function DashboardClient({
 
   const filters: { id: Filter; label: string; n: number }[] = [
     { id: "upcoming", label: "In arrivo", n: stats.upcoming.length },
+    ...(stats.pending.length > 0
+      ? [{ id: "pending" as Filter, label: "⚠️ Da confermare", n: stats.pending.length }]
+      : []),
     { id: "today", label: "Oggi", n: stats.today.length },
     { id: "done", label: "Fatti", n: stats.done.length },
     { id: "cancelled", label: "Annullati", n: stats.cancelled.length },
@@ -183,6 +206,15 @@ export function DashboardClient({
           <p className="font-hand mt-1.5 sm:mt-2 text-xl sm:text-3xl text-ink-soft">Gestisci gli appuntamenti scritti sull&apos;agenda.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowUsersModal(true)}
+            className="btn btn-ink !py-2 !px-3.5 sm:!py-2.5 sm:!px-4 text-xs sm:text-sm font-bold shadow-sketch flex items-center gap-1.5"
+            title="Gestisci gli utenti registrati nel database ed elimina i profili fake"
+          >
+            <span>👥</span>
+            <span>Utenti Registrati</span>
+          </button>
           <Link href="/profilo#gamification-manager" className="btn btn-yellow !py-2 !px-3.5 sm:!py-2.5 sm:!px-4 text-xs sm:text-sm font-bold shadow-sketch">
             🏅 Registro Gamification &amp; Timbri
           </Link>
@@ -658,6 +690,16 @@ export function DashboardClient({
           }}
         />
       )}
+
+      {/* MODALE FINESTRA UTENTI REGISTRATI NEL DATABASE */}
+      <RegisteredUsersModal
+        isOpen={showUsersModal}
+        onClose={() => {
+          setShowUsersModal(false);
+          reload();
+        }}
+        currentManagerEmail={user?.email}
+      />
     </div>
   );
 }

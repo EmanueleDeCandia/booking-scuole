@@ -161,6 +161,7 @@ export function BookingModal({
             clientEmail: email,
             clientPhone: phone,
             notes,
+            status: isManager ? "confirmed" : "pending",
             reminderMinutes: reminder,
           }),
         });
@@ -572,45 +573,47 @@ export function BookingModal({
             </select>
           </label>
 
-          {/* Notifiche rapide: WhatsApp e Calendario */}
+          {/* Notifiche rapide: WhatsApp (esclusiva Gestore) e Calendario (Allievo) */}
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            {phone.trim().length >= 6 ? (
-              <a
-                href={whatsAppUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={async () => {
-                  if (existing && isManager) {
-                    try {
-                      const patch: Record<string, unknown> = {};
-                      if (existing.status === "pending") {
-                        patch.status = "confirmed";
-                      } else if (!existing.reminderSent) {
-                        patch.reminderSent = true;
-                      }
-                      if (Object.keys(patch).length > 0) {
-                        await fetch(`/api/bookings/${existing.id}`, {
-                          method: "PATCH",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify(patch),
-                        });
-                        window.dispatchEvent(new Event("bookings:changed"));
-                      }
-                    } catch {}
-                  }
-                }}
-                className="tag bg-crayon-green text-white hover:-rotate-1 !py-1.5 !px-3 text-xs font-semibold shadow-xs inline-flex items-center gap-1.5"
-                title={isPending ? "Apre WhatsApp con conferma appuntamento e aggiorna lo stato" : "Apre WhatsApp con promemoria appuntamento"}
-              >
-                💬 {isPending ? "Invia Conferma WhatsApp" : "Invia Promemoria WhatsApp"}
-              </a>
-            ) : (
-              <span
-                className="tag bg-gray-200 text-gray-500 !py-1.5 !px-2.5 text-[11px] cursor-not-allowed"
-                title="Inserisci il numero di telefono per inviare messaggi WhatsApp"
-              >
-                💬 WhatsApp (inserisci telefono)
-              </span>
+            {isManager && (
+              phone.trim().length >= 6 ? (
+                <a
+                  href={whatsAppUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={async () => {
+                    if (existing) {
+                      try {
+                        const patch: Record<string, unknown> = {};
+                        if (existing.status === "pending") {
+                          patch.status = "confirmed";
+                        } else if (!existing.reminderSent) {
+                          patch.reminderSent = true;
+                        }
+                        if (Object.keys(patch).length > 0) {
+                          await fetch(`/api/bookings/${existing.id}`, {
+                            method: "PATCH",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify(patch),
+                          });
+                          window.dispatchEvent(new Event("bookings:changed"));
+                        }
+                      } catch {}
+                    }
+                  }}
+                  className="tag bg-crayon-green text-white hover:-rotate-1 !py-1.5 !px-3 text-xs font-semibold shadow-xs inline-flex items-center gap-1.5"
+                  title={isPending ? "Apre WhatsApp con conferma appuntamento e aggiorna lo stato su Confermato" : "Apre WhatsApp con promemoria appuntamento"}
+                >
+                  💬 {isPending ? "Invia Conferma WhatsApp" : "Invia Promemoria WhatsApp"}
+                </a>
+              ) : (
+                <span
+                  className="tag bg-gray-200 text-gray-500 !py-1.5 !px-2.5 text-[11px] cursor-not-allowed"
+                  title="Inserisci il numero di telefono per inviare messaggi WhatsApp"
+                >
+                  💬 WhatsApp (inserisci telefono)
+                </span>
+              )
             )}
 
             {!isManager && (
@@ -636,7 +639,7 @@ export function BookingModal({
                       reminderMinutes: reminder,
                     })
                   }
-                  className="tag bg-white hover:rotate-1 !py-1 !px-2.5 text-xs font-medium border border-ink shadow-xs"
+                  className="tag bg-white hover:-rotate-1 !py-1 !px-2.5 text-xs font-medium border border-ink shadow-xs"
                   title="Scarica file calendario .ics"
                 >
                   📎 Scarica .ics
@@ -652,6 +655,17 @@ export function BookingModal({
         <div className="mt-4 flex flex-col gap-2 border-t-2 border-dashed border-ink/20 pt-3 sm:flex-row sm:items-center sm:justify-between">
           {existing ? (
             <div className="flex flex-wrap gap-1.5">
+              {isManager && existing.status === "pending" && (
+                <button
+                  type="button"
+                  onClick={() => setStatus("confirmed")}
+                  className="btn btn-yellow !px-2.5 !py-1 text-xs font-bold shadow-xs flex items-center gap-1"
+                  disabled={busy}
+                  title="Conferma la prenotazione dell'allievo"
+                >
+                  ✓ Conferma Prenotazione
+                </button>
+              )}
               {isManager && existing.status !== "done" && (
                 <button
                   type="button"
