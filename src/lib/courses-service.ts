@@ -250,6 +250,44 @@ export async function createCourse(input: {
   return toCourseDTO(newCourse);
 }
 
+export async function updateCourse(
+  courseId: number,
+  patch: {
+    title?: string;
+    description?: string | null;
+    instructor?: string | null;
+    category?: string | null;
+    color?: string | null;
+    maxCapacity?: number | null;
+    price?: number | null;
+    status?: "active" | "upcoming";
+  }
+): Promise<CourseDTO> {
+  await ensureCoursesSeed();
+  const docRef = doc(firestore, "courses", String(courseId));
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) {
+    throw new Error("CORSO_NON_TROVATO");
+  }
+
+  const updates: Record<string, any> = {
+    updatedAt: new Date().toISOString(),
+  };
+
+  if (patch.title !== undefined) updates.title = patch.title.trim();
+  if (patch.description !== undefined) updates.description = patch.description?.trim() || null;
+  if (patch.instructor !== undefined) updates.instructor = patch.instructor?.trim() || "Maestro della Scuola";
+  if (patch.category !== undefined) updates.category = patch.category;
+  if (patch.color !== undefined) updates.color = patch.color;
+  if (patch.maxCapacity !== undefined && patch.maxCapacity !== null) updates.maxCapacity = Number(patch.maxCapacity);
+  if (patch.price !== undefined) updates.price = patch.price;
+  if (patch.status !== undefined) updates.status = patch.status;
+
+  await updateDoc(docRef, updates);
+  const updatedSnap = await getDoc(docRef);
+  return toCourseDTO({ id: courseId, ...updatedSnap.data() });
+}
+
 export async function submitCourseVote(input: {
   courseId: number;
   rating: number; // 1 a 10

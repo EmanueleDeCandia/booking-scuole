@@ -27,6 +27,50 @@ export function CoursesShowcaseClient() {
   const [courseToDelete, setCourseToDelete] = useState<CourseDTO | null>(null);
   const [deletingCourse, setDeletingCourse] = useState(false);
 
+  // Modale per assegnare o modificare il docente (gestore)
+  const [courseToAssign, setCourseToAssign] = useState<CourseDTO | null>(null);
+  const [instructorInput, setInstructorInput] = useState("");
+  const [savingInstructor, setSavingInstructor] = useState(false);
+
+  const handleOpenAssignModal = (course: CourseDTO) => {
+    setCourseToAssign(course);
+    setInstructorInput(course.instructor || "");
+  };
+
+  const handleSaveInstructor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courseToAssign) return;
+    const name = instructorInput.trim();
+    if (!name) {
+      toast.show("Inserisci il nome del docente", "error");
+      return;
+    }
+    setSavingInstructor(true);
+    try {
+      const res = await fetch("/api/courses", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: courseToAssign.id,
+          instructor: name,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Errore aggiornamento docente");
+      }
+      toast.show(`👤 Docente aggiornato con successo per "${courseToAssign.title}"!`, "info");
+      setCourseToAssign(null);
+      await loadCourses();
+      window.dispatchEvent(new Event("courses:changed"));
+    } catch (err: any) {
+      console.error(err);
+      toast.show(err.message || "Impossibile assegnare il docente", "error");
+    } finally {
+      setSavingInstructor(false);
+    }
+  };
+
   useEffect(() => {
     try {
       let token = localStorage.getItem("naive_voter_token");
@@ -269,15 +313,26 @@ export function CoursesShowcaseClient() {
                           <span>💶 Quota: <strong className="text-ink">€{course.price}</strong></span>
                         </div>
                         {user?.role === "manager" && (
-                          <button
-                            type="button"
-                            onClick={() => setCourseToDelete(course)}
-                            className="inline-flex items-center gap-1 text-xs font-bold text-crayon-red hover:text-white hover:bg-crayon-red py-1 px-2.5 rounded border border-crayon-red/40 transition-colors shadow-xs"
-                            title={`Elimina proposta "${course.title}"`}
-                          >
-                            <span>🗑️</span>
-                            <span>Elimina Proposta</span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenAssignModal(course)}
+                              className="btn btn-yellow !py-1 !px-2.5 text-xs font-bold shadow-xs flex items-center gap-1"
+                              title={`Assegna o modifica il docente per "${course.title}"`}
+                            >
+                              <span>👤</span>
+                              <span>Assegna Docente</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCourseToDelete(course)}
+                              className="inline-flex items-center gap-1 text-xs font-bold text-crayon-red hover:text-white hover:bg-crayon-red py-1 px-2.5 rounded border border-crayon-red/40 transition-colors shadow-xs"
+                              title={`Elimina proposta "${course.title}"`}
+                            >
+                              <span>🗑️</span>
+                              <span>Elimina</span>
+                            </button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -367,25 +422,38 @@ export function CoursesShowcaseClient() {
 
               <div className="mt-5 pt-3 border-t border-dashed border-ink/20 flex items-center justify-between gap-2">
                 {user?.role === "manager" ? (
-                  <button
-                    type="button"
-                    onClick={() => setCourseToDelete(course)}
-                    className="inline-flex items-center gap-1 text-xs font-bold text-crayon-red hover:text-white hover:bg-crayon-red py-1 px-2.5 rounded border border-crayon-red/40 transition-colors shadow-xs"
-                    title={`Elimina corso "${course.title}"`}
-                  >
-                    <span>🗑️</span>
-                    <span>Elimina Corso</span>
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setCourseToDelete(course)}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-crayon-red hover:text-white hover:bg-crayon-red py-1 px-2.5 rounded border border-crayon-red/40 transition-colors shadow-xs"
+                      title={`Elimina corso "${course.title}"`}
+                    >
+                      <span>🗑️</span>
+                      <span>Elimina Corso</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenAssignModal(course)}
+                      className="btn btn-yellow !py-1.5 !px-3 text-xs font-bold shadow-xs flex items-center gap-1"
+                      title={`Assegna o modifica il docente per "${course.title}"`}
+                    >
+                      <span>👤</span>
+                      <span>Assegna Docente</span>
+                    </button>
+                  </>
                 ) : (
-                  <span className="text-[11px] text-ink-soft">Disponibile in Agenda 3D</span>
+                  <>
+                    <span className="text-[11px] text-ink-soft">Disponibile in Agenda 3D</span>
+                    <button
+                      type="button"
+                      onClick={() => handleBookCourse(course.title)}
+                      className="btn btn-red !py-1.5 !px-3 text-xs font-bold shadow-xs"
+                    >
+                      Iscriviti a Questo Corso ✎
+                    </button>
+                  </>
                 )}
-                <button
-                  type="button"
-                  onClick={() => handleBookCourse(course.title)}
-                  className="btn btn-red !py-1.5 !px-3 text-xs font-bold shadow-xs"
-                >
-                  Iscriviti a Questo Corso ✎
-                </button>
               </div>
             </div>
           ))}
@@ -513,6 +581,84 @@ export function CoursesShowcaseClient() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE ASSEGNAZIONE DOCENTE AL CORSO PER IL GESTORE */}
+      {courseToAssign && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+          <div className="sketch bg-[#fffdfa] max-w-md w-full p-5 sm:p-6 shadow-2xl relative border-2 border-ink animate-scale-up">
+            <button
+              type="button"
+              onClick={() => setCourseToAssign(null)}
+              className="absolute top-4 right-4 text-ink hover:text-crayon-red text-lg font-bold p-1 leading-none"
+              title="Chiudi finestra"
+            >
+              ✕
+            </button>
+
+            <div className="flex items-center gap-2 text-crayon-teal">
+              <span className="text-2xl">👤</span>
+              <h3 className="font-display text-xl uppercase font-bold text-ink">
+                Assegna Docente al Corso
+              </h3>
+            </div>
+
+            <p className="font-hand text-lg text-ink-soft mt-1 leading-snug">
+              Imposta il maestro o docente titolare per il corso <strong>{courseToAssign.title}</strong>.
+            </p>
+
+            <form onSubmit={handleSaveInstructor} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-ink mb-1">
+                  Nome e Titolo del Docente *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={instructorInput}
+                  onChange={(e) => setInstructorInput(e.target.value)}
+                  placeholder="Es. M° Roberto Bolle, Prof.ssa Elena Sala…"
+                  className="naive w-full text-sm font-medium py-2 px-3 focus:border-crayon-teal"
+                  autoFocus
+                />
+              </div>
+
+              <div className="rounded-lg bg-crayon-yellow/20 p-3 border border-dashed border-ink/20 text-xs text-ink-soft space-y-1">
+                <div>📚 <strong>Corso:</strong> {courseToAssign.title} ({courseToAssign.category})</div>
+                <div>🏷️ <strong>Stato:</strong> {courseToAssign.status === "active" ? "Corso Attivo" : "In Programma"}</div>
+                <div>👥 <strong>Posti aula:</strong> {courseToAssign.maxCapacity} allievi</div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setCourseToAssign(null)}
+                  disabled={savingInstructor}
+                  className="btn btn-ink-soft !py-2 !px-4 text-xs font-bold text-ink"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingInstructor || !instructorInput.trim()}
+                  className="btn btn-teal !py-2 !px-4 text-xs font-bold text-white shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {savingInstructor ? (
+                    <>
+                      <span className="animate-spin text-sm">⏳</span>
+                      <span>Salvataggio…</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>✓</span>
+                      <span>Salva Docente</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
