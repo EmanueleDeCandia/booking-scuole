@@ -598,8 +598,8 @@ function StudentProfileClient() {
               </div>
             ) : (
               pastBookings.map((b) => {
-                const isPresent = b.attendanceStatus === "present" || b.status === "done";
                 const isAbsent = b.attendanceStatus === "absent";
+                const isPresent = !isAbsent && (b.attendanceStatus === "present" || b.status === "done");
                 const isCancelled = b.status === "cancelled";
 
                 return (

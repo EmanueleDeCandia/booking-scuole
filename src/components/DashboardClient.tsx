@@ -60,10 +60,10 @@ export function DashboardClient({
 
   const markAttendance = async (b: BookingDTO, attendanceStatus: "present" | "absent") => {
     if (b.status === "cancelled") return;
-    const patch: Record<string, unknown> = { attendanceStatus };
-    if (attendanceStatus === "present") {
-      patch.status = "done";
-    }
+    const patch: Record<string, unknown> = {
+      attendanceStatus,
+      status: "done",
+    };
     await fetch(`/api/bookings/${b.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -730,7 +730,7 @@ function StatusPill({
     pending_confirmation: { l: "in attesa di conferma", c: "bg-crayon-yellow text-ink border-2 border-ink font-bold shadow-xs" },
     pending: { l: "in attesa", c: "bg-crayon-yellow text-ink border-2 border-ink font-bold shadow-xs" },
     confirmed: { l: "confermato", c: "bg-crayon-teal text-white" },
-    done: { l: "fatto", c: "bg-crayon-green text-white" },
+    done: { l: attendance === "absent" ? "concluso" : "fatto", c: attendance === "absent" ? "bg-paper-aged text-ink border border-ink/40" : "bg-crayon-green text-white" },
     cancelled: { l: "annullato", c: "bg-ink text-white" },
   };
   const s = map[status] ?? { l: status, c: "bg-white text-ink" };

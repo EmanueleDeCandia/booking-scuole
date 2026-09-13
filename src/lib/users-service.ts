@@ -269,8 +269,10 @@ export async function getUserProfileData(userId: string) {
 
   const todayStr = new Date().toISOString().slice(0, 10);
   const total = userBookings.length;
-  const present = userBookings.filter((b) => b.attendanceStatus === "present" || b.status === "done").length;
-  const absent = userBookings.filter((b) => b.attendanceStatus === "absent").length;
+  const isAbsent = (b: any) => b.attendanceStatus === "absent";
+  const isPresent = (b: any) => !isAbsent(b) && (b.attendanceStatus === "present" || b.status === "done");
+  const present = userBookings.filter(isPresent).length;
+  const absent = userBookings.filter(isAbsent).length;
   const upcoming = userBookings.filter((b) => b.status !== "cancelled" && b.day >= todayStr).length;
   const cancelled = userBookings.filter((b) => b.status === "cancelled").length;
 

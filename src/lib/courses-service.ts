@@ -369,7 +369,7 @@ export async function getManagerDashboardMetrics() {
 
   for (const b of allBookings) {
     const courseKey = b.service;
-    const isPresent = b.attendanceStatus === "present" || b.status === "done";
+    const isPresent = b.attendanceStatus === "present" || (b.status === "done" && b.attendanceStatus !== "absent");
 
     if (!studentsPerCourse[courseKey]) {
       studentsPerCourse[courseKey] = { count: 0, color: "#e8542f", instructor: "Scuola" };
