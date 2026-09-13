@@ -21,7 +21,9 @@ export async function POST(req: NextRequest) {
     const hour = Number(body.hour);
     const clientName = String(body.clientName ?? "").trim();
     const service = String(body.service ?? "Formazione");
-    const userId = body.userId || req.cookies.get("auth_user_id")?.value || null;
+    const authRole = req.cookies.get("auth_role")?.value;
+    const isManagerRole = authRole === "manager";
+    const userId = body.userId || (isManagerRole ? null : req.cookies.get("auth_user_id")?.value) || null;
 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
       return Response.json({ error: "Data non valida" }, { status: 400 });

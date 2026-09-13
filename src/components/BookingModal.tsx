@@ -131,7 +131,7 @@ export function BookingModal({
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userId: user?.id ?? existing.userId ?? null,
+            userId: isManager ? (existing.userId ?? null) : (user?.id ?? existing.userId ?? null),
             clientName: name,
             service,
             clientEmail: email || existing.clientEmail || null,
@@ -153,7 +153,7 @@ export function BookingModal({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            userId: user?.id ?? null,
+            userId: isManager ? null : (user?.id ?? null),
             day,
             hour,
             clientName: name,
@@ -189,7 +189,7 @@ export function BookingModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           status,
-          userId: user?.id ?? existing.userId ?? null,
+          userId: isManager ? (existing.userId ?? null) : (user?.id ?? existing.userId ?? null),
           clientEmail: email || existing.clientEmail || null,
         }),
       });

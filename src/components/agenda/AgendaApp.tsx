@@ -9,6 +9,7 @@ import {
   formatDayLong,
   formatHour,
   isoWeekNumber,
+  parseISODate,
   serviceColor,
   startOfWeek,
   toISODate,
@@ -36,7 +37,16 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
   const toast = useToast();
   const [bookings, setBookings] = useState<BookingDTO[]>(initialBookings);
   const [version, setVersion] = useState(0);
-  const [monday, setMonday] = useState<Date>(() => startOfWeek(new Date()));
+  const [monday, setMonday] = useState<Date>(() => {
+    const now = new Date();
+    const base = startOfWeek(now);
+    // Se oggi è domenica (giorno di chiusura in cui l'intera settimana feriale è già trascorsa),
+    // apriamo l'agenda direttamente sulla settimana entrante con gli slot e le lezioni future
+    if (now.getDay() === 0) {
+      return addDays(base, 7);
+    }
+    return base;
+  });
   const [flipReq, setFlipReq] = useState<FlipRequest>(null);
   const flipCount = useRef(0);
   const [flipping, setFlipping] = useState(false);
@@ -93,7 +103,9 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
 
   const goToday = () => {
     if (flipping) return;
-    const t = startOfWeek(new Date());
+    const now = new Date();
+    const base = startOfWeek(now);
+    const t = now.getDay() === 0 ? addDays(base, 7) : base;
     if (toISODate(t) === toISODate(monday)) return;
     flipCount.current += 1;
     setFlipping(true);
@@ -129,27 +141,40 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
   );
 
   const [weekFilter, setWeekFilter] = useState<"upcoming" | "past" | "all">("upcoming");
-  const todayStr = toISODate(new Date());
-  const curHour = new Date().getHours();
 
   const days = weekDays(monday);
   const weekBookings = getWeekBookings(monday);
   const freeSlots = 7 * 11 - weekBookings.length;
 
-  const isPastSlot = (b: BookingDTO) => {
-    if (b.day < todayStr) return true;
-    if (b.day === todayStr && b.hour <= curHour) return true;
-    return false;
-  };
+  const isPastSlot = useCallback((b: BookingDTO) => {
+    if (b.status === "done") return true;
+    const [y, m, d] = b.day.split("-").map(Number);
+    const slotEnd = new Date(y, m - 1, d, Number(b.hour) + 1, 0, 0);
+    return slotEnd <= new Date();
+  }, []);
 
-  const upcomingCount = weekBookings.filter((b) => !isPastSlot(b)).length;
-  const pastCount = weekBookings.filter((b) => isPastSlot(b)).length;
+  // Tutti gli appuntamenti futuri (non cancellati) a partire da oggi/ora corrente
+  const allUpcomingBookings = useMemo(() => {
+    return bookings
+      .filter((b) => b.status !== "cancelled" && !isPastSlot(b))
+      .sort((a, b) => a.day.localeCompare(b.day) || a.hour - b.hour);
+  }, [bookings, isPastSlot]);
 
-  const filteredWeekBookings = weekBookings.filter((b) => {
-    if (weekFilter === "upcoming") return !isPastSlot(b);
-    if (weekFilter === "past") return isPastSlot(b);
-    return true;
-  });
+  // Appuntamenti passati della settimana visualizzata
+  const weekPastBookings = useMemo(() => {
+    return weekBookings
+      .filter((b) => isPastSlot(b))
+      .sort((a, b) => (b.day + b.hour).localeCompare(a.day + a.hour));
+  }, [weekBookings, isPastSlot]);
+
+  const upcomingCount = allUpcomingBookings.length;
+  const pastCount = weekPastBookings.length;
+
+  const displayedBookings = useMemo(() => {
+    if (weekFilter === "upcoming") return allUpcomingBookings;
+    if (weekFilter === "past") return weekPastBookings;
+    return weekBookings.slice().sort((a, b) => (a.day + a.hour).localeCompare(b.day + b.hour) || a.hour - b.hour);
+  }, [weekFilter, allUpcomingBookings, weekPastBookings, weekBookings]);
 
   return (
     <div className="mx-auto w-full max-w-7xl px-3 sm:px-8 pb-12">
@@ -285,13 +310,19 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
       <div className="mt-6 grid gap-4 sm:gap-5 md:grid-cols-3">
         <div className="sketch p-3.5 sm:p-5 md:col-span-2">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink/15 pb-2">
-            <div className="font-display scribble-under inline-block text-base sm:text-lg uppercase">Questa settimana</div>
+            <div className="font-display scribble-under inline-block text-base sm:text-lg uppercase">
+              {weekFilter === "upcoming"
+                ? "Prossimi Appuntamenti"
+                : weekFilter === "past"
+                ? `Appuntamenti Passati (${isoWeekNumber(monday)}ª sett.)`
+                : `Questa settimana (${isoWeekNumber(monday)}ª sett.)`}
+            </div>
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={() => setWeekFilter("upcoming")}
                 className={`btn text-xs font-bold !py-1 !px-2.5 ${weekFilter === "upcoming" ? "btn-ink" : ""}`}
-                title="Visualizza solo le lezioni e gli slot futuri"
+                title="Visualizza tutti gli appuntamenti futuri in arrivo"
               >
                 ⚡ Prossimi ({upcomingCount})
               </button>
@@ -313,32 +344,35 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
               </button>
             </div>
           </div>
-          {filteredWeekBookings.length === 0 ? (
+          {displayedBookings.length === 0 ? (
             <p className="font-hand mt-3 text-xl sm:text-2xl text-ink-soft">
               {weekFilter === "upcoming"
-                ? "Nessun appuntamento futuro in questa settimana: gli slot sono liberi ✎"
+                ? "Nessun appuntamento futuro in programma: gli slot sono liberi ✎"
                 : weekFilter === "past"
                 ? "Nessun appuntamento passato per questa settimana."
-                : "Nessun appuntamento: la pagina è tutta tua ✎"}
+                : "Nessun appuntamento in questa settimana: la pagina è tutta tua ✎"}
             </p>
           ) : (
             <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-              {filteredWeekBookings
-                .slice()
-                .sort((a, b) => (a.day + a.hour).localeCompare(b.day + b.hour) || a.hour - b.hour)
-                .map((b) => {
-                  const isOwner = Boolean(
-                    user && (
-                      (b.userId && b.userId === user.id) ||
-                      (b.clientEmail && user.email && b.clientEmail.toLowerCase() === user.email.toLowerCase())
-                    )
-                  );
-                  const displayClient = isManager || isOwner ? b.clientName : "Slot Riservato";
+              {displayedBookings.map((b) => {
+                const isOwner = Boolean(
+                  user && (
+                    (b.userId && b.userId === user.id) ||
+                    (b.clientEmail && user.email && b.clientEmail.toLowerCase() === user.email.toLowerCase())
+                  )
+                );
+                const displayClient = isManager || isOwner ? b.clientName : "Slot Riservato";
 
-                  return (
-                    <li key={b.id}>
-                      <button
-                        onClick={() => setTarget({ day: b.day, hour: b.hour, booking: b })}
+                return (
+                  <li key={b.id}>
+                    <button
+                      onClick={() => {
+                        setTarget({ day: b.day, hour: b.hour, booking: b });
+                        const bMonday = startOfWeek(parseISODate(b.day));
+                        if (toISODate(bMonday) !== toISODate(monday)) {
+                          setMonday(bMonday);
+                        }
+                      }}
                         className="sketch-sm flex w-full items-center gap-3 bg-white px-3 py-2 text-left transition-transform hover:-rotate-1"
                       >
                         <span
@@ -348,7 +382,7 @@ export function AgendaApp({ initialBookings }: { initialBookings: BookingDTO[] }
                         <span className="min-w-0 flex-1">
                           <span className="font-hand block truncate text-xl leading-none flex items-center gap-2">
                             <span>{displayClient}</span>
-                            {isOwner && (
+                            {!isManager && isOwner && (
                               <span className="tag bg-crayon-teal text-white text-[9px] !py-0 !px-1 font-bold">
                                 Il tuo corso
                               </span>
